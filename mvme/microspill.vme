@@ -1,0 +1,1400 @@
+{
+    "DAQConfig": {
+        "enabled": true,
+        "events": [
+            {
+                "enabled": true,
+                "id": "{7119307f-abf5-4433-b85e-a90e82cf28f1}",
+                "irqLevel": 4,
+                "irqVector": 0,
+                "modules": [
+                    {
+                        "baseAddress": 33554432,
+                        "enabled": true,
+                        "id": "{7c5ad14e-eb77-4589-852e-c5097234432c}",
+                        "initScripts": [
+                            {
+                                "enabled": true,
+                                "id": "{02e3f012-58d8-4de3-946c-d9a619aa9023}",
+                                "name": "Module Init",
+                                "properties": {
+                                    "icon": ":/vme_script.png"
+                                },
+                                "variable_table": {
+                                    "name": "",
+                                    "variables": {
+                                    }
+                                },
+                                "vme_script": "# TRIVA registers:\n# - Status Register     02000000 (hex)\n# - Control Register    02000004\n# - FCATIME             02000008\n# - CTIME               0200000C\n\n# Triva module initialisation as MASTER\n# Write Control Register (0x02000004)\nwrite A32 D32 0x0004 0x00000004         # MASTER - has to come first!\nwrite A32 D32 0x0004 0x00001000         # disable trigger bus\nwrite A32 D32 0x0004 0x00000010         # HALT\nwrite A32 D32 0x0004 0x00000040         # CLEAR\nwrite A32 D32 0x0008 $(65535 - 20)      # Fast Clear\n#write A32 D32 0x000C $(65535 - 1700)     # Ctime\nwrite A32 D32 0x000C $(65535 - 80)     # Ctime\n\n######## MVLC setup for TRIVA triggering ########\n# Optional signal aliases: map Triva trigger values to MVLC IRQs (1..15).\n# If no alias is set the trigger number is directly taken as the IRQ number.\n# Otherwise if one of the alias register pairs is used all pairs will be active too.\n# Mapping a trigger value to 0 makes the MVLC ignore the trigger.\n\nwriteabs A32 D16 0xFFFF7000 14  # TRIVA Trigger 14 (Start)\nwriteabs A32 D16 0xFFFF7002 14  # mapped to MVLC IRQ 14\n\nwriteabs A32 D16 0xFFFF7004 15  # TRIVA Trigger 15 (Stop)\nwriteabs A32 D16 0xFFFF7006 15  # mapped to MVLC IRQ 15\n\nwriteabs A32 D16 0xFFFF7008  1  # TRIVA Trigger\nwriteabs A32 D16 0xFFFF700A  8  # mapped to MVLC IRQ (data_event)\n\nwriteabs A32 D16 0xFFFF700C  2  # TRIVA Trigger\nwriteabs A32 D16 0xFFFF700E  9  # mapped to MVLC IRQ (scaler_event)\n\nwriteabs A32 D16 0xFFFF7010  3\t# Map trigger 3 (bit combination of 1&2) to the\nwriteabs A32 D16 0xFFFF7012 10\t# data event too. This avoids the readout getting\n                                # stuck when both the data and scaler triggers are\n                                # active at the same time.\nwriteabs A32 D16 0xFFFF7014  4\nwriteabs A32 D16 0xFFFF7016 11\n\n\n# All available signal alias registers since MVLC firmware 0x0023.\n/*\nwriteabs A32 D16 0xFFFF7000 5      # triva trigger number\nwriteabs A32 D16 0xFFFF7002 8      # mapped to mvlc irq\n\nwriteabs A32 D16 0xFFFF7004 6      # triva trigger number\nwriteabs A32 D16 0xFFFF7006 8      # mapped to mvlc irq\n\nwriteabs A32 D16 0xFFFF7008 0      # triva trigger number\nwriteabs A32 D16 0xFFFF700A 0      # mapped to mvlc irq\n\nwriteabs A32 D16 0xFFFF700C 0      # triva trigger number\nwriteabs A32 D16 0xFFFF700E 0      # mapped to mvlc irq\n\nwriteabs A32 D16 0xFFFF7010 0      # triva trigger number\nwriteabs A32 D16 0xFFFF7012 0      # mapped to mvlc irq\n\nwriteabs A32 D16 0xFFFF7014 0      # triva trigger number\nwriteabs A32 D16 0xFFFF7016 0      # mapped to mvlc irq\n*/\nwriteabs A32 D16 0xFFFF7018 12     # triva trigger number\nwriteabs A32 D16 0xFFFF701A 8      # mapped to mvlc irq\n\nwriteabs A32 D16 0xFFFF701C 13     # triva trigger number\nwriteabs A32 D16 0xFFFF701E 8      # mapped to mvlc irq\n"
+                            }
+                        ],
+                        "name": "triva7_master",
+                        "type": "triva7_master",
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vmeReadout": {
+                            "enabled": true,
+                            "id": "{e4ffa2dd-ae9f-4942-a92a-b95d37c6bc3f}",
+                            "name": "Module Readout",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# Readout script for the Triva 7 master; activated via VME IRQ 4.\n# Reads the trigger number from Triva and turns it into a MVLC IRQ signal.\n\nread A32 D32 0x0000 slow # preliminary <= joern\nread A32 D32 0x0000 slow\n\n#mvlc_stack_begin                        # For debugging only: puts following instructions into same execution stack\n                                        # when interactively running the script. Has no effect when running the DAQ\n                                        # normally.\n\n# evaluate trigger type\nmvlc_read_to_accu A32 D32 0x0000 slow   # Copy TRIVA status register to MVLC accumulator, slow cycle.\nmvlc_mask_shift_accu 0x0000000F 0       # Mask lower 4 bits of the accu, no shift.\nmvlc_signal_accu                        # Signal the accumulator creating a MVLC internal IRQ signal.\nwrite A32 D32 0x0000  0x00009000        # Triva Status Register: clear IRQ4 (EV_IRQ_CLEAR | IRQ_CLEAR)\n\n#marker 0x12345678\t\t\t\t\t\t# Debug: write a marker value identifying this event\n#mvlc_writespecial accu\t\t\t\t\t# Debug: write the accumulator value into the data stream\n\n#mvlc_stack_end                          # For debugging only; has no effect in normal execution.\n\n"
+                        },
+                        "vmeReset": {
+                            "enabled": true,
+                            "id": "{04ec2e22-f132-4024-b4e4-acb16c8258b5}",
+                            "name": "Module Reset",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# Reset the module to a clean default state here. This is executed before\n# initializing the modules at DAQ start time.\n"
+                        }
+                    },
+                    {
+                        "baseAddress": 1342177280,
+                        "enabled": false,
+                        "id": "{0df85f55-ea40-4eef-9e13-6635468d5668}",
+                        "initScripts": [
+                            {
+                                "enabled": true,
+                                "id": "{c35cbc30-0fee-4b53-a735-01b9d40acbc7}",
+                                "name": "Module Init",
+                                "properties": {
+                                    "icon": ":/vme_script.png"
+                                },
+                                "variable_table": {
+                                    "name": "",
+                                    "variables": {
+                                    }
+                                },
+                                "vme_script": "\n\n## JAM 06-04-22 cleanup of code \n\nprint \"VETAR module init...\"\n## JAM so war es vorher:\n#set crwait 1ms\n\nset crwait 10ms\n\n\nset configbase 0x280000 # configbase for slot 5\nset vmebase 0x50000000 # 5 * 0x10000000\nset ctrlbase 0x1400   # 5 * 0x400\n\nsetbase ${configbase}\n\n#JAM2022: the eprtk lib seems not to like hex format in expressions, so:\nset ADEM0  1568 #0x623 -3 JAM22 NOTE:  This shift does not matter for mvlc access! always reads correct value\nset ADEM1  1584 #0x633 -3\n\nset AMCAP0  288 # 0x123 -3\nset AMCAP1  320 # 0x143 -3\n\nset FUN0ADER    524128 # 0x7FF63 -3\nset FUN1ADER    524144 # 0x7FF73 -3 \nset FUN2ADER    524160 # 0x7FF83 -3\nset FUN3ADER    524176 # 0x7FF93 -3 \nset FUN4ADER    524192 # 0x7FFA3 -3\nset FUN5ADER    524208 # 0x7FFB3 -3\nset FUN6ADER    524224 # 0x7FFC3 -3 \nset FUN7ADER    524240 # 0x7FFD3 -3\n# JAM 01-03-2022: ADER addresses must be shifted down by 3 (address%4), see vetar_csr_write()\n\nset MBLT_ENDIAN 0x7FF50 #0xtff53 -3\n\nset INT_LEVEL   0x7ff58 #0x7ff5b -3 because of (address%4), see vetar_csr_write()\nset INTVECTOR   0x7ff5c #0x7ff5f -3 because of (address%4), see vetar_csr_write()\nset WB_32_64    0x7ff30 #0x7ff33 -3 because of (address%4), see vetar_csr_write()\nset BIT_SET_REG 0x7fff8 #0x7FFFB -3 because of (address%4), see vetar_csr_write()\nset BIT_CLR_REG 0x7FFF4 #0x7FFF7 -3 because of (address%4), see vetar_csr_write()\n\nset CRAM_OWNER 0x7fff0 # 0x7fff3 -3\n\nset RESET_CORE 0x80\nset ENABLE_CORE 0x10\n\nset WB32        0x1\nset WB64        0x0\n\nset EMUL_DAT_WD 48\nset MASTER_CTRL 24\nset MASTER_DATA 40\nset WINDOW_OFFSET_LOW  56\n\n\n## check vendor id\nset VETAR_VENDOR_ID\t\t0x80031\nset VME_VENDOR_ID_OFFSET   36 # 0x24\n\n\nprint \"checking vendor id, should be ${VETAR_VENDOR_ID}\"\n\n\nread cr d32 ${VME_VENDOR_ID_OFFSET} slow\nread cr d32 $( ${VME_VENDOR_ID_OFFSET} +4) slow\nread cr d32 $( ${VME_VENDOR_ID_OFFSET} +8) slow\n\nwait 10ms\n\n/*\n# the following is additional check if vetar cscr access is OK\nprint \"testing CRAM OWNER register:\"\nread cr d32 ${CRAM_OWNER} slow\nwrite cr d32 ${CRAM_OWNER} 0xF\nread cr d32 ${CRAM_OWNER} \nread cr d32 ${BIT_SET_REG} \nprint \"endian register:\"\nread cr d32 ${MBLT_ENDIAN} \nprint \"adem0\":\nread cr d32 ${ADEM0} slow\nread cr d32 $( ${ADEM0} + 4) slow \nread cr d32 $( ${ADEM0} + 8) slow\nread cr d32 $( ${ADEM0} + 12) slow\nprint \"adem1\":\nread cr d32 ${ADEM1} slow\nread cr d32 $( ${ADEM1} + 4) slow \nread cr d32 $( ${ADEM1} + 8) slow\nread cr d32 $( ${ADEM1} + 12) slow\nprint \"amcap0\":\nread cr d32 ${AMCAP0} \nread cr d32 $( ${AMCAP0} + 4) \nread cr d32 $( ${AMCAP0} + 8) \nread cr d32 $( ${AMCAP0} + 12) \nread cr d32 $( ${AMCAP0} + 16) \nread cr d32 $( ${AMCAP0} + 20) \nread cr d32 $( ${AMCAP0} + 24) \nread cr d32 $( ${AMCAP0} + 28) \nprint \"amcap1\":\nread cr d32 ${AMCAP1} \nread cr d32 $( ${AMCAP1} + 4) \nread cr d32 $( ${AMCAP1} + 8) \nread cr d32 $( ${AMCAP1} + 12) \nread cr d32 $( ${AMCAP1} + 16) \nread cr d32 $( ${AMCAP1} + 20) \nread cr d32 $( ${AMCAP1} + 24) \nread cr d32 $( ${AMCAP1} + 28) \n*/\n \n#    /* reset the core */\nwrite cr d32 ${BIT_SET_REG} ${RESET_CORE} # vetar_csr_write(RESET_CORE, privdata->cr_csr, BIT_SET_REG);\nwait 50ms\n#    /* disable the core */\nwrite cr d32 ${BIT_CLR_REG} ${ENABLE_CORE}  # vetar_csr_write(ENABLE_CORE, privdata->cr_csr, BIT_CLR_REG);\nwait ${crwait}\n #   /* default to 32bit WB interface */\nwrite cr d32 ${WB_32_64} ${WB32} #    vetar_csr_write(WB32, privdata->cr_csr, WB_32_64);\nwait ${crwait}\nset VME_A32_USER_DATA_SCT 9 # 0x09\n\nwrite cr d32 ${FUN0ADER}         0x50    \t\t\t\t\t\t #${(${vmebase} >> 24) & 0xFF}\nwait ${crwait}\nwrite cr d32 $( ${FUN0ADER} + 4)  0x00    \t\t\t\t\t\t\t#${(${vmebase} >> 16) & 0xFF}\nwait ${crwait}\nwrite cr d32 $( ${FUN0ADER} + 8)  0x00    \t\t\t\t\t\t\t#${(${vmebase} >> 8) & 0xFF}\nwait ${crwait}\nwrite cr d32 $( ${FUN0ADER} + 12) $( ${VME_A32_USER_DATA_SCT} * 4)  # (am & 0x3F) << 2;\n\nwait ${crwait}\n\n#read cr d32 ${FUN0ADER} slow\n#read cr d32 $( ${FUN0ADER} + 4)  slow\n#read cr d32 $( ${FUN0ADER} + 8)  slow    \n#read cr d32 $( ${FUN0ADER} + 12)  slow\n\nset VME_A24_USER_DATA_SCT 57 #0x39\n\nwrite cr d32 ${FUN1ADER}         0x00    \t\t\t\t\t\t #${(${ctrlbase} >> 24) & 0xFF}\nwait ${crwait}\nwrite cr d32 $( ${FUN1ADER} + 4)  0x00    \t\t\t\t\t\t\t #${(${ctrlbase} >> 16) & 0xFF}\nwait ${crwait}\nwrite cr d32 $( ${FUN1ADER} + 8)  0x14    \t\t\t\t\t\t\t #${(${ctrlbase} >> 8) & 0xFF} 14\nwait ${crwait}\nwrite cr d32 $( ${FUN1ADER} + 12) $( ${VME_A24_USER_DATA_SCT} * 4) # (am & 0x3F) << 2;\nwait ${crwait}\n\n\nwait ${crwait}\n\n/* \n#  check if contents are there, redundant if it works.\nread cr d32 ${FUN1ADER} slow\nread cr d32 $( ${FUN1ADER} + 4)  slow\nread cr d32 $( ${FUN1ADER} + 8)  slow    \nread cr d32 $( ${FUN1ADER} + 12)  slow\nwait ${crwait}\n*/\n\nwrite cr d32 ${BIT_SET_REG} ${ENABLE_CORE}  #    vetar_csr_write(ENABLE_CORE, privdata->cr_csr, BIT_SET_REG);\n## JAM 0oct-22: vorher:\nwait 100ms\n\n#wait 1000ms\n\n## put to direct access register mode\nset DIRECT_ACCESS_CONTROL 4\nsetbase ${ctrlbase}\n\n#from vetar_wb_request:\n#print \"first vallue of master control:\"\n#read a24 d32  ${MASTER_CTRL} # just to see it...\nwrite A24 D32 ${MASTER_CTRL} 1 \n#  <- since we cannot branch on conditions much here, always acknowledge the control register JAM22;\n\n#vetar_wb_repl:\nwrite a24 d32 ${MASTER_DATA} 0\nwrite a24 d32 ${MASTER_CTRL} 3\nwait ${crwait}\n\n# following is in probe after wishbone register:\nwrite a24 d32 ${EMUL_DAT_WD} 0\nwrite a24 d32 ${WINDOW_OFFSET_LOW} 0\nwrite a24 d32 ${MASTER_CTRL} 0\nwait ${crwait}\n\nprint \"default value of dactl:\"\nread a24 d32 ${DIRECT_ACCESS_CONTROL} slow\n\n# following is for enigma release (0x200100):\nset tlu_address 0x2000100  \n#<- this value was checked with eb-ls for our vetar JAM 17-03-2022\nwrite a24 d32 ${DIRECT_ACCESS_CONTROL} ${tlu_address} # set tlu address for direct access mode\n#read a24 d32 ${DIRECT_ACCESS_CONTROL} slow\n\n# now put intialization of f_user.c:\nsetbase ${vmebase}\nwait 100ms\n\n#following defines are from gsi_tm_latch.h:\nset WR_TLU_FIFO_NR \t\t\t\t3\nset GSI_TM_LATCH_CH_SELECT \t\t0x058\nset GSI_TM_LATCH_CHNS_FIFOSIZE \t0x038\nset GSI_TM_LATCH_FIFO_CLEAR \t0x004\nset GSI_TM_LATCH_TRIG_ARMSET \t0x010\n\nwrite a32 d32 ${GSI_TM_LATCH_CH_SELECT} ${WR_TLU_FIFO_NR}\n\nprint \"size of  White Rabbit TLU FIFO:\"\nread a32 d32 ${GSI_TM_LATCH_CHNS_FIFOSIZE} slow\nwrite a32 d32 ${GSI_TM_LATCH_FIFO_CLEAR} 0xFFFFFFFF\nwrite a32 d32 ${GSI_TM_LATCH_TRIG_ARMSET} 0xFFFFFFFF\n\n\n"
+                            }
+                        ],
+                        "name": "VETAR",
+                        "type": "user01",
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vmeReadout": {
+                            "enabled": true,
+                            "id": "{adb9557d-c2f1-4517-924c-5de47577f1d0}",
+                            "name": "Module Readout",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "set vmebase 0x50000000\nset GSI_TM_LATCH_FIFO_READY      0x000\nset GSI_TM_LATCH_FIFO_CNT        0x064       #FIFO Queue   fill count                  (ro)\nset GSI_TM_LATCH_FIFO_FTSHI      0x068       #timestamp HIGH words in cycles               (ro)\nset GSI_TM_LATCH_FIFO_FTSLO      0x06c       #timestamp LOW words in cycles            (ro)\nset GSI_TM_LATCH_FIFO_FTSSUB     0x070       #timestamp sub-cycle                          (ro)\nset GSI_TM_LATCH_FIFO_POP        0x05C       #pop the topmost FIFO Q Element           (wo)\n\n\n/* JAM 3-2022: we read out registers as is; formatting for time sorter is done in m_readout_mvlc*/\nmarker 0x12345678 # unique (?) header for m_readout_mvlc\nmarker 0x400 # subsystem ID\nread a32 d32 ${GSI_TM_LATCH_FIFO_READY} slow \nread a32 d32 ${GSI_TM_LATCH_FIFO_CNT} slow  \nwrite a32 d32 ${GSI_TM_LATCH_FIFO_POP} 0xF\n# for testing, just take timestamps as is. bit operations with accu maybe later, or in special unpacker...\n#read a32 d32 ${GSI_TM_LATCH_FIFO_FTSSUB} \nread a32 d32 ${GSI_TM_LATCH_FIFO_FTSLO} slow\nread a32 d32 ${GSI_TM_LATCH_FIFO_FTSHI} slow\n\n"
+                        },
+                        "vmeReset": {
+                            "enabled": true,
+                            "id": "{bd6dbbd2-d954-47c9-93e0-1cc5dd3f2993}",
+                            "name": "Module Reset",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# Reset the module to a clean default state here. This is executed before\n# initializing the modules at DAQ start time.\n"
+                        }
+                    }
+                ],
+                "name": "event_0_catch_triva_trigger_type",
+                "scalerReadoutFrequency": 0,
+                "scalerReadoutPeriod": 2,
+                "triggerCondition": "Interrupt",
+                "triggerOptions": {
+                    "IRQUseIACK": false,
+                    "mvlc.timer_base": "ms",
+                    "mvlc.timer_period": 1000,
+                    "sis3153.timer_period": 1
+                },
+                "variable_table": {
+                    "name": "",
+                    "variables": {
+                        "mesy_eoe_marker": {
+                            "comment": "EndOfEvent marker for mesytec modules (0: eventcounter, 1: timestamp, 3: extended_timestamp).",
+                            "definitionLocation": "",
+                            "value": "1"
+                        },
+                        "mesy_mcst": {
+                            "comment": "The most significant byte of the 32-bit multicast address to be used by this event.",
+                            "definitionLocation": "",
+                            "value": "bb"
+                        },
+                        "mesy_readout_num_events": {
+                            "comment": "Number of events to read out in each cycle.",
+                            "definitionLocation": "",
+                            "value": "1"
+                        },
+                        "sys_irq": {
+                            "comment": "IRQ value set for the VME Controller for this event.",
+                            "definitionLocation": "",
+                            "value": "4"
+                        }
+                    }
+                },
+                "vme_scripts": {
+                    "daq_start": {
+                        "enabled": true,
+                        "id": "{da829f12-8854-487e-999d-49793eb92eeb}",
+                        "name": "DAQ Start",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "# Start the acquisition sequence for all modules via the events multicast address.\n/*\nwriteabs a32 d16 0x${mesy_mcst}00603a      0   # stop acq\nwriteabs a32 d16 0x${mesy_mcst}006090      3   # reset CTRA and CTRB\nwriteabs a32 d16 0x${mesy_mcst}00603c      1   # FIFO reset\nwriteabs a32 d16 0x${mesy_mcst}00603a      1   # start acq\nwriteabs a32 d16 0x${mesy_mcst}006034      1   # readout reset\n*/\n\nsetbase 0x02000000\n# Start_acq\nwrite A32 D32 0x0004 0x00000010         # HALT\nwrite A32 D32 0x0004 0x00000040         # CLEAR\nwrite A32 D32 0x0000 14                 # Master sets Trigger 14\nwrite A32 D32 0x0004  0x00000003        # (EN_IRQ | GO); Enable IRQ and send Trigger 14"
+                    },
+                    "daq_stop": {
+                        "enabled": true,
+                        "id": "{f7b00dd6-2ea3-42b4-b148-5249844dfdf4}",
+                        "name": "DAQ Stop",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "#writeabs a32 d16 0x${mesy_mcst}00603a     0   # stop acquisition\n\nsetbase 0x02000000\nwrite A32 D32 0x0004 0x00000010         # HALT\nwrite A32 D32 0x0004 0x00000040         # CLEAR\nwrite A32 D32 0x0000 15                 # Master sets Trigger 15\nwrite A32 D32 0x0004  0x00000003        # (EN_IRQ | GO); Enable IRQ and send Trigger 14\n"
+                    },
+                    "readout_end": {
+                        "enabled": true,
+                        "id": "{055926a4-b110-4069-affc-0d735c010588}",
+                        "name": "Cycle End",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "# Commands executed at the end of each readout cycle\n# Do a multicast write of the readout_reset register\n#writeabs a32 d16 0x${mesy_mcst}006034      1   # readout reset\n"
+                    },
+                    "readout_start": {
+                        "enabled": true,
+                        "id": "{44300572-49fc-4f5b-acac-74385ef0ed0f}",
+                        "name": "Cycle Start",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "# Commands executed at the start of each readout cycle\n\n"
+                    }
+                }
+            },
+            {
+                "enabled": true,
+                "id": "{b8d820d9-b111-4a46-aa6e-946c3ac80886}",
+                "irqLevel": 14,
+                "irqVector": 0,
+                "modules": [
+                    {
+                        "baseAddress": 33554432,
+                        "enabled": true,
+                        "id": "{e6079bc1-340a-4d14-b1f5-9a81bbc19b57}",
+                        "initScripts": [
+                            {
+                                "enabled": true,
+                                "id": "{ca08d20b-5490-486f-8d01-58b9aaaa244a}",
+                                "name": "Module Init",
+                                "properties": {
+                                    "icon": ":/vme_script.png"
+                                },
+                                "variable_table": {
+                                    "name": "",
+                                    "variables": {
+                                    }
+                                },
+                                "vme_script": ""
+                            }
+                        ],
+                        "name": "triva7_trigger_reset",
+                        "type": "triva7_trigger_reset",
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vmeReadout": {
+                            "enabled": true,
+                            "id": "{6d777c0c-4ca1-4e68-8ec5-d4e6678821be}",
+                            "name": "Module Readout",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "\nmarker 0x14141414\n\n# reset trigger\nwrite A32 D32 0x0000 0x8030 # EV_IRQ_CLEAR | FC_PULSE | DT_CLEAR\n\n# for trigger 14 also reset tlu:\nset vmebase 0x50000000\nset GSI_TM_LATCH_FIFO_CLEAR \t0x004\nsetbase ${vmebase}\nwrite a32 d32 ${GSI_TM_LATCH_FIFO_CLEAR} 0xFFFFFFFF"
+                        },
+                        "vmeReset": {
+                            "enabled": true,
+                            "id": "{3a40cfd2-89e8-4820-8dfc-8334c86573ce}",
+                            "name": "Module Reset",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# Reset the module to a clean default state here. This is executed before\n# initializing the modules at DAQ start time.\n"
+                        }
+                    }
+                ],
+                "name": "event_1_start_acquisition",
+                "scalerReadoutFrequency": 0,
+                "scalerReadoutPeriod": 2,
+                "triggerCondition": "Interrupt",
+                "triggerOptions": {
+                    "IRQUseIACK": false,
+                    "mvlc.timer_base": "ms",
+                    "mvlc.timer_period": 1000,
+                    "sis3153.timer_period": 1
+                },
+                "variable_table": {
+                    "name": "",
+                    "variables": {
+                        "mesy_eoe_marker": {
+                            "comment": "EndOfEvent marker for mesytec modules (0: eventcounter, 1: timestamp, 3: extended_timestamp).",
+                            "definitionLocation": "",
+                            "value": "1"
+                        },
+                        "mesy_mcst": {
+                            "comment": "The most significant byte of the 32-bit multicast address to be used by this event.",
+                            "definitionLocation": "",
+                            "value": "bc"
+                        },
+                        "mesy_readout_num_events": {
+                            "comment": "Number of events to read out in each cycle.",
+                            "definitionLocation": "",
+                            "value": "1"
+                        },
+                        "sys_irq": {
+                            "comment": "IRQ value set for the VME Controller for this event.",
+                            "definitionLocation": "",
+                            "value": "14"
+                        }
+                    }
+                },
+                "vme_scripts": {
+                    "daq_start": {
+                        "enabled": true,
+                        "id": "{e9d255cf-5a7b-43e4-b669-757b96fdeb24}",
+                        "name": "DAQ Start",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": ""
+                    },
+                    "daq_stop": {
+                        "enabled": true,
+                        "id": "{52fd893a-a214-46b7-b743-b16e44b2e03e}",
+                        "name": "DAQ Stop",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": ""
+                    },
+                    "readout_end": {
+                        "enabled": true,
+                        "id": "{e9c3b9ff-e186-4208-949e-66465b94022a}",
+                        "name": "Cycle End",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "# Commands executed at the end of each readout cycle\n# Do a multicast write of the readout_reset register\n#writeabs a32 d16 0x${mesy_mcst}006034      1   # readout reset\n"
+                    },
+                    "readout_start": {
+                        "enabled": true,
+                        "id": "{3e3f96d7-f272-4bfa-bd6b-516a0df779f9}",
+                        "name": "Cycle Start",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "# Commands executed at the start of each readout cycle\n"
+                    }
+                }
+            },
+            {
+                "enabled": true,
+                "id": "{c0f40af2-a333-4714-b1b6-cd036fc40f57}",
+                "irqLevel": 15,
+                "irqVector": 0,
+                "modules": [
+                    {
+                        "baseAddress": 33554432,
+                        "enabled": true,
+                        "id": "{e4eb9b26-2220-4158-b0cf-e62be8bef74f}",
+                        "initScripts": [
+                            {
+                                "enabled": true,
+                                "id": "{a69e96a4-0418-435d-b073-13401fe9a76f}",
+                                "name": "Module Init",
+                                "properties": {
+                                    "icon": ":/vme_script.png"
+                                },
+                                "variable_table": {
+                                    "name": "",
+                                    "variables": {
+                                    }
+                                },
+                                "vme_script": ""
+                            }
+                        ],
+                        "name": "triva7_trigger_reset",
+                        "type": "triva7_trigger_reset",
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vmeReadout": {
+                            "enabled": true,
+                            "id": "{c788e4bb-3c4d-45b6-86fc-665e3b2d9a4a}",
+                            "name": "Module Readout",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "\n#marker 0x15151515\n\n# reset trigger\n# write A32 D32 0x0000 0x8030 # EV_IRQ_CLEAR | FC_PULSE | DT_CLEAR\n\n# for trigger 15 also reset tlu:\nset vmebase 0x50000000\nset GSI_TM_LATCH_FIFO_CLEAR \t0x004\nsetbase ${vmebase}\nwrite a32 d32 ${GSI_TM_LATCH_FIFO_CLEAR} 0xFFFFFFFF"
+                        },
+                        "vmeReset": {
+                            "enabled": true,
+                            "id": "{a01a1e20-f63c-4990-81dc-ec676c2c0dbc}",
+                            "name": "Module Reset",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# Reset the module to a clean default state here. This is executed before\n# initializing the modules at DAQ start time.\n"
+                        }
+                    }
+                ],
+                "name": "event_2_stop_acquisition",
+                "scalerReadoutFrequency": 0,
+                "scalerReadoutPeriod": 2,
+                "triggerCondition": "Interrupt",
+                "triggerOptions": {
+                    "IRQUseIACK": false,
+                    "mvlc.timer_base": "ms",
+                    "mvlc.timer_period": 1000,
+                    "sis3153.timer_period": 1
+                },
+                "variable_table": {
+                    "name": "",
+                    "variables": {
+                        "mesy_eoe_marker": {
+                            "comment": "EndOfEvent marker for mesytec modules (0: eventcounter, 1: timestamp, 3: extended_timestamp).",
+                            "definitionLocation": "",
+                            "value": "1"
+                        },
+                        "mesy_mcst": {
+                            "comment": "The most significant byte of the 32-bit multicast address to be used by this event.",
+                            "definitionLocation": "",
+                            "value": "bd"
+                        },
+                        "mesy_readout_num_events": {
+                            "comment": "Number of events to read out in each cycle.",
+                            "definitionLocation": "",
+                            "value": "1"
+                        },
+                        "sys_irq": {
+                            "comment": "IRQ value set for the VME Controller for this event.",
+                            "definitionLocation": "",
+                            "value": "15"
+                        }
+                    }
+                },
+                "vme_scripts": {
+                    "daq_start": {
+                        "enabled": true,
+                        "id": "{42df7b6a-ab10-4b2d-a851-2f4f4d21eefb}",
+                        "name": "DAQ Start",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "# Start the acquisition sequence for all modules via the events multicast address.\n#writeabs a32 d16 0x${mesy_mcst}00603a      0   # stop acq\n#writeabs a32 d16 0x${mesy_mcst}006090      3   # reset CTRA and CTRB\n#writeabs a32 d16 0x${mesy_mcst}00603c      1   # FIFO reset\n#writeabs a32 d16 0x${mesy_mcst}00603a      1   # start acq\n#writeabs a32 d16 0x${mesy_mcst}006034      1   # readout reset\n"
+                    },
+                    "daq_stop": {
+                        "enabled": true,
+                        "id": "{abfc76a9-2c6e-4eee-ba50-eb2081310402}",
+                        "name": "DAQ Stop",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "#writeabs a32 d16 0x${mesy_mcst}00603a     0   # stop acquisition\n"
+                    },
+                    "readout_end": {
+                        "enabled": true,
+                        "id": "{6c349004-787b-4d0a-bf10-b99c1a68f0a3}",
+                        "name": "Cycle End",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "# Commands executed at the end of each readout cycle\n# Do a multicast write of the readout_reset register\n#writeabs a32 d16 0x${mesy_mcst}006034      1   # readout reset\n"
+                    },
+                    "readout_start": {
+                        "enabled": true,
+                        "id": "{b73d8cba-b986-4e27-85c6-2d2f8f43ed5f}",
+                        "name": "Cycle Start",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "# Commands executed at the start of each readout cycle\n"
+                    }
+                }
+            },
+            {
+                "enabled": true,
+                "id": "{18e9af46-0cbc-4df2-8ba0-dfba6c907a53}",
+                "irqLevel": 8,
+                "irqVector": 0,
+                "modules": [
+                    {
+                        "baseAddress": 50331648,
+                        "enabled": true,
+                        "id": "{c6875202-5f4f-4669-9fb7-f3ebe17b2873}",
+                        "initScripts": [
+                            {
+                                "enabled": true,
+                                "id": "{60d2da14-482a-44f0-ba10-4bbf2a656698}",
+                                "name": "Module Init",
+                                "properties": {
+                                    "icon": ":/vme_script.png"
+                                },
+                                "variable_table": {
+                                    "name": "",
+                                    "variables": {
+                                    }
+                                },
+                                "vme_script": "## JAM 15-04-2024:  all addresses and values dedicated to firmware fw_6e4ba1a9_trlo\n## Ported to FRS by M.B. 06.11.2024\n\nset TRLO_PULSE_BASE\t\t\t\t\t0xa000\t#40960\nset TRLO_SETUP_MAX_MULTI_TRIG\t\t0x9730\n\nset TRLO_PULSE_MULTI_TRIG_BUF_CLEAR       0x200000\nset TRLO_PULSE_SERIAL_TSTAMP_BUF_CLEAR  0x20000000\nset TRLO_PULSE_SERIAL_TSTAMP_FAIL_CLEAR 0x40000000\nset TRLO_PULSE_MULTI_LATCH_CLEAR_ALL    0x001e0000\n\n###################################################\n\nwrite a32 d32 ${TRLO_SETUP_MAX_MULTI_TRIG} 0x1\nwrite a32 d32 ${TRLO_PULSE_BASE} ${TRLO_PULSE_MULTI_TRIG_BUF_CLEAR}\nwrite a32 d32 ${TRLO_PULSE_BASE} ${TRLO_PULSE_SERIAL_TSTAMP_BUF_CLEAR}\nwrite a32 d32 ${TRLO_PULSE_BASE} ${TRLO_PULSE_SERIAL_TSTAMP_FAIL_CLEAR}\nwrite a32 d32 ${TRLO_PULSE_BASE} ${TRLO_PULSE_MULTI_LATCH_CLEAR_ALL}"
+                            }
+                        ],
+                        "name": "TRLOII-MULTI-TIMER(1)",
+                        "type": "user05",
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vmeReadout": {
+                            "enabled": true,
+                            "id": "{38ddae0c-98d3-4add-b6f7-a418d5b33d0b}",
+                            "name": "Module Readout",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# Martin B. 05.12.2024\n# Only change the following line:\n\nset INDEX 1\n\n# Do not touch below.\n\nset TRLO_PULSE_BASE\t 0xa000 # 40960   \nset TRLO_MULTI_LATCH 49152  # 0xc000\nset TRIG_TPAT_ADDR                   0x5000\nset TRLO_PULSE_MULTI_LATCH_CLEAR     131072 # 0x00020000\nset TRLO_PULSE_MUX_SRC_SCALER_LATCH  32     # 0x00000020\nset TRLO_PULSE_TIMER_LATCH           128    # 0x00000080\nset TRLO_PULSE_TRIG_SCALER_LATCH     2      # 0x2\n\nset TRLO_MULTI_LATCH_STATUS          20528 \t# 0x5030\n\nset TRLO_SCALER_MUX_SRC              24892  # 0x613c\nset TRLO_TLATCH_TIMING_TICK          32768  # 0x8000\n\n# Barrier between potential VETAR ahead.\nmarker 0xbeefbabe\n\n# Latch mux-scalers, trig-scalers and 100MHz clock status:\nwrite a32 d32 ${TRLO_PULSE_BASE} 0xa2\n\n# Read the TPAT:\nread a32 d32 ${TRIG_TPAT_ADDR} slow\n\n# Read corresponding ECL's_IN\nread a32 d32 $( ${TRLO_SCALER_MUX_SRC} +  4 * (${INDEX} - 1) ) slow\n\n# Read low 32-bits of latched (trigger) timestamp\nread a32 d32 ${TRLO_TLATCH_TIMING_TICK} slow\n\n# Set mask and shift of the local accumulator (for multi-timing register)\nmvlc_signal_accu\nmvlc_mask_shift_accu 0x000003FF 0 \nmvlc_read_to_accu a32 d32 $( ${TRLO_MULTI_LATCH_STATUS} + 4 * (${INDEX} - 1) ) slow\nread a32 d32 $( ${TRLO_MULTI_LATCH} + 4096 * (${INDEX} - 1) ) slow"
+                        },
+                        "vmeReset": {
+                            "enabled": true,
+                            "id": "{2e612f69-92e5-4ff9-8a96-c6527dded879}",
+                            "name": "Module Reset",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# Reset the module to a clean default state here. This is executed before\n# initializing the modules at DAQ start time.\n"
+                        }
+                    },
+                    {
+                        "baseAddress": 33554432,
+                        "enabled": true,
+                        "id": "{8fc306ee-6ec9-40d9-b5fe-ff78154a0c1a}",
+                        "initScripts": [
+                            {
+                                "enabled": true,
+                                "id": "{b0c8bb03-8fab-4ed6-9afd-59a59535be36}",
+                                "name": "Module Init",
+                                "properties": {
+                                    "icon": ":/vme_script.png"
+                                },
+                                "variable_table": {
+                                    "name": "",
+                                    "variables": {
+                                    }
+                                },
+                                "vme_script": ""
+                            }
+                        ],
+                        "name": "triva7_trigger_reset",
+                        "type": "triva7_trigger_reset",
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vmeReadout": {
+                            "enabled": true,
+                            "id": "{43236bf7-0d58-4f0b-a107-c183d57eb973}",
+                            "name": "Module Readout",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# reset trigger - JAM disable below for user trig clear\nwrite A32 D32 0x0000 0x8030 # EV_IRQ_CLEAR | FC_PULSE | DT_CLEAR\n"
+                        },
+                        "vmeReset": {
+                            "enabled": true,
+                            "id": "{c91087c1-2e51-4a9e-8c93-a923687ec4d2}",
+                            "name": "Module Reset",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# Reset the module to a clean default state here. This is executed before\n# initializing the modules at DAQ start time.\n"
+                        }
+                    }
+                ],
+                "name": "event_3_hardware_trigger_type_1",
+                "scalerReadoutFrequency": 0,
+                "scalerReadoutPeriod": 2,
+                "triggerCondition": "Interrupt",
+                "triggerOptions": {
+                    "IRQUseIACK": false,
+                    "mvlc.timer_base": "ms",
+                    "mvlc.timer_period": 1000,
+                    "sis3153.timer_period": 1
+                },
+                "variable_table": {
+                    "name": "",
+                    "variables": {
+                        "mesy_eoe_marker": {
+                            "comment": "EndOfEvent marker for mesytec modules (0: eventcounter, 1: timestamp, 3: extended_timestamp).",
+                            "definitionLocation": "",
+                            "value": "1"
+                        },
+                        "mesy_mcst": {
+                            "comment": "The most significant byte of the 32-bit multicast address to be used by this event.",
+                            "definitionLocation": "",
+                            "value": "be"
+                        },
+                        "mesy_readout_num_events": {
+                            "comment": "Number of events to read out in each cycle.",
+                            "definitionLocation": "",
+                            "value": "1"
+                        },
+                        "sys_irq": {
+                            "comment": "IRQ value set for the VME Controller for this event.",
+                            "definitionLocation": "",
+                            "value": "8"
+                        }
+                    }
+                },
+                "vme_scripts": {
+                    "daq_start": {
+                        "enabled": true,
+                        "id": "{025f951b-ffe3-4894-8074-ca908ace65d0}",
+                        "name": "DAQ Start",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "# Start the acquisition sequence for all modules via the events multicast address.\n#writeabs a32 d16 0x${mesy_mcst}00603a      0   # stop acq\n#writeabs a32 d16 0x${mesy_mcst}006090      3   # reset CTRA and CTRB\n#writeabs a32 d16 0x${mesy_mcst}00603c      1   # FIFO reset\n#writeabs a32 d16 0x${mesy_mcst}00603a      1   # start acq\n#writeabs a32 d16 0x${mesy_mcst}006034      1   # readout reset\n"
+                    },
+                    "daq_stop": {
+                        "enabled": true,
+                        "id": "{a6c7aad1-2e96-4584-a96b-a0cb88f86ffc}",
+                        "name": "DAQ Stop",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "#writeabs a32 d16 0x${mesy_mcst}00603a     0   # stop acquisition\n"
+                    },
+                    "readout_end": {
+                        "enabled": true,
+                        "id": "{fc56c33a-8879-4102-84b4-749941cbd8b8}",
+                        "name": "Cycle End",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "# Commands executed at the end of each readout cycle\n# Do a multicast write of the readout_reset register\n#writeabs a32 d16 0x${mesy_mcst}006034      1   # readout reset\n"
+                    },
+                    "readout_start": {
+                        "enabled": true,
+                        "id": "{d6bf8dcd-a776-49f7-8e5d-b2691ac8a9d2}",
+                        "name": "Cycle Start",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "# Commands executed at the start of each readout cycle\n"
+                    }
+                }
+            },
+            {
+                "enabled": true,
+                "id": "{7c596565-9d23-4e3a-ab35-fa3c1d87523e}",
+                "irqLevel": 9,
+                "irqVector": 0,
+                "modules": [
+                    {
+                        "baseAddress": 33554432,
+                        "enabled": true,
+                        "id": "{979f4e71-4782-45e7-9252-19753011e942}",
+                        "initScripts": [
+                            {
+                                "enabled": true,
+                                "id": "{71ae9d87-d282-4806-a93b-4e6d1a6ad099}",
+                                "name": "Module Init",
+                                "properties": {
+                                    "icon": ":/vme_script.png"
+                                },
+                                "variable_table": {
+                                    "name": "",
+                                    "variables": {
+                                    }
+                                },
+                                "vme_script": ""
+                            }
+                        ],
+                        "name": "triva7_trigger_reset",
+                        "type": "triva7_trigger_reset",
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vmeReadout": {
+                            "enabled": true,
+                            "id": "{4d5f276b-b25d-4638-95a1-2c016111fddf}",
+                            "name": "Module Readout",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# reset trigger\nwrite A32 D32 0x0000 0x8030 # EV_IRQ_CLEAR | FC_PULSE | DT_CLEAR\n"
+                        },
+                        "vmeReset": {
+                            "enabled": true,
+                            "id": "{00bfbe9e-1574-4e21-9a49-f3cedfa7091b}",
+                            "name": "Module Reset",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# Reset the module to a clean default state here. This is executed before\n# initializing the modules at DAQ start time.\n"
+                        }
+                    }
+                ],
+                "name": "event_4_hardware_trigger_type_2",
+                "scalerReadoutFrequency": 0,
+                "scalerReadoutPeriod": 2,
+                "triggerCondition": "Interrupt",
+                "triggerOptions": {
+                    "IRQUseIACK": false,
+                    "mvlc.timer_base": "ms",
+                    "mvlc.timer_period": 1000,
+                    "sis3153.timer_period": 1
+                },
+                "variable_table": {
+                    "name": "",
+                    "variables": {
+                        "mesy_eoe_marker": {
+                            "comment": "EndOfEvent marker for mesytec modules (0: eventcounter, 1: timestamp, 3: extended_timestamp).",
+                            "definitionLocation": "",
+                            "value": "1"
+                        },
+                        "mesy_mcst": {
+                            "comment": "The most significant byte of the 32-bit multicast address to be used by this event.",
+                            "definitionLocation": "",
+                            "value": "bf"
+                        },
+                        "mesy_readout_num_events": {
+                            "comment": "Number of events to read out in each cycle.",
+                            "definitionLocation": "",
+                            "value": "1"
+                        },
+                        "sys_irq": {
+                            "comment": "IRQ value set for the VME Controller for this event.",
+                            "definitionLocation": "",
+                            "value": "9"
+                        }
+                    }
+                },
+                "vme_scripts": {
+                    "daq_start": {
+                        "enabled": true,
+                        "id": "{71a8f058-fe42-44dd-9b1e-e7a0c471dd64}",
+                        "name": "DAQ Start",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "# Start the acquisition sequence for all modules via the events multicast address.\n#writeabs a32 d16 0x${mesy_mcst}00603a      0   # stop acq\n#writeabs a32 d16 0x${mesy_mcst}006090      3   # reset CTRA and CTRB\n#writeabs a32 d16 0x${mesy_mcst}00603c      1   # FIFO reset\n#writeabs a32 d16 0x${mesy_mcst}00603a      1   # start acq\n#writeabs a32 d16 0x${mesy_mcst}006034      1   # readout reset\n"
+                    },
+                    "daq_stop": {
+                        "enabled": true,
+                        "id": "{a462ae49-2188-40ec-8ed7-dcc995b3b5d7}",
+                        "name": "DAQ Stop",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "#writeabs a32 d16 0x${mesy_mcst}00603a     0   # stop acquisition\n"
+                    },
+                    "readout_end": {
+                        "enabled": true,
+                        "id": "{46c3dd12-5bce-4da7-92ed-5f2c0be39b70}",
+                        "name": "Cycle End",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "# Commands executed at the end of each readout cycle\n# Do a multicast write of the readout_reset register\n#writeabs a32 d16 0x${mesy_mcst}006034      1   # readout reset\n"
+                    },
+                    "readout_start": {
+                        "enabled": true,
+                        "id": "{f15ce350-f4fa-4846-bfe9-8a56afdb95f2}",
+                        "name": "Cycle Start",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "# Commands executed at the start of each readout cycle\n"
+                    }
+                }
+            },
+            {
+                "enabled": true,
+                "id": "{0ac01d50-ca00-4f2c-9b56-eacae2f743d5}",
+                "irqLevel": 10,
+                "irqVector": 0,
+                "modules": [
+                    {
+                        "baseAddress": 33554432,
+                        "enabled": true,
+                        "id": "{46d05669-ce9e-4d8b-a657-7229196fb085}",
+                        "initScripts": [
+                            {
+                                "enabled": true,
+                                "id": "{2502c915-ee9f-4423-8217-bacbb52df58b}",
+                                "name": "Module Init",
+                                "properties": {
+                                    "icon": ":/vme_script.png"
+                                },
+                                "variable_table": {
+                                    "name": "",
+                                    "variables": {
+                                    }
+                                },
+                                "vme_script": ""
+                            }
+                        ],
+                        "name": "triva7_trigger_reset",
+                        "type": "triva7_trigger_reset",
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vmeReadout": {
+                            "enabled": true,
+                            "id": "{ed40351f-8d56-457f-8ce2-e0361945d3ed}",
+                            "name": "Module Readout",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# reset trigger\nwrite A32 D32 0x0000 0x8030 # EV_IRQ_CLEAR | FC_PULSE | DT_CLEAR\n"
+                        },
+                        "vmeReset": {
+                            "enabled": true,
+                            "id": "{995572ba-b60d-433d-915b-89ad48d6917c}",
+                            "name": "Module Reset",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# Reset the module to a clean default state here. This is executed before\n# initializing the modules at DAQ start time.\n"
+                        }
+                    }
+                ],
+                "name": "event_5_hardware_trigger_type_3",
+                "scalerReadoutFrequency": 0,
+                "scalerReadoutPeriod": 2,
+                "triggerCondition": "Interrupt",
+                "triggerOptions": {
+                    "IRQUseIACK": false,
+                    "mvlc.timer_base": "ms",
+                    "mvlc.timer_period": 1000,
+                    "sis3153.timer_period": 1
+                },
+                "variable_table": {
+                    "name": "",
+                    "variables": {
+                        "mesy_eoe_marker": {
+                            "comment": "EndOfEvent marker for mesytec modules (0: eventcounter, 1: timestamp, 3: extended_timestamp).",
+                            "definitionLocation": "",
+                            "value": "1"
+                        },
+                        "mesy_mcst": {
+                            "comment": "The most significant byte of the 32-bit multicast address to be used by this event.",
+                            "definitionLocation": "",
+                            "value": "bf"
+                        },
+                        "mesy_readout_num_events": {
+                            "comment": "Number of events to read out in each cycle.",
+                            "definitionLocation": "",
+                            "value": "1"
+                        },
+                        "sys_irq": {
+                            "comment": "IRQ value set for the VME Controller for this event.",
+                            "definitionLocation": "",
+                            "value": "10"
+                        }
+                    }
+                },
+                "vme_scripts": {
+                    "daq_start": {
+                        "enabled": true,
+                        "id": "{7e689571-922a-4312-b326-9c7dc5b94ad0}",
+                        "name": "DAQ Start",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "# Start the acquisition sequence for all modules via the events multicast address.\n#writeabs a32 d16 0x${mesy_mcst}00603a      0   # stop acq\n#writeabs a32 d16 0x${mesy_mcst}006090      3   # reset CTRA and CTRB\n#writeabs a32 d16 0x${mesy_mcst}00603c      1   # FIFO reset\n#writeabs a32 d16 0x${mesy_mcst}00603a      1   # start acq\n#writeabs a32 d16 0x${mesy_mcst}006034      1   # readout reset\n"
+                    },
+                    "daq_stop": {
+                        "enabled": true,
+                        "id": "{44ed4003-2beb-48c0-addf-799dae59991b}",
+                        "name": "DAQ Stop",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "#writeabs a32 d16 0x${mesy_mcst}00603a     0   # stop acquisition\n"
+                    },
+                    "readout_end": {
+                        "enabled": true,
+                        "id": "{23e3a58e-a2fd-4f3f-8ebb-4f1a4bcb3980}",
+                        "name": "Cycle End",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "# Commands executed at the end of each readout cycle\n# Do a multicast write of the readout_reset register\n#writeabs a32 d16 0x${mesy_mcst}006034      1   # readout reset\n"
+                    },
+                    "readout_start": {
+                        "enabled": true,
+                        "id": "{7cfaac7b-30a2-4ff4-9bfe-a44d56bdb681}",
+                        "name": "Cycle Start",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "# Commands executed at the start of each readout cycle\n"
+                    }
+                }
+            },
+            {
+                "enabled": true,
+                "id": "{f37f07f8-860e-4208-afec-f7df6b02e1a2}",
+                "irqLevel": 11,
+                "irqVector": 0,
+                "modules": [
+                    {
+                        "baseAddress": 50331648,
+                        "enabled": true,
+                        "id": "{d63e0732-6d6b-4c06-b4e3-a6e165874899}",
+                        "initScripts": [
+                            {
+                                "enabled": true,
+                                "id": "{272de579-e7c0-44d8-8b08-4c88cacf1c6f}",
+                                "name": "Module Init",
+                                "properties": {
+                                    "icon": ":/vme_script.png"
+                                },
+                                "variable_table": {
+                                    "name": "",
+                                    "variables": {
+                                    }
+                                },
+                                "vme_script": "## JAM 15-04-2024:  all addresses and values dedicated to firmware fw_6e4ba1a9_trlo\n## Ported to FRS by M.B. 06.11.2024\n\nset TRLO_PULSE_BASE\t\t\t\t\t0xa000\t#40960\nset TRLO_SETUP_MAX_MULTI_TRIG\t\t0x9730\n\nset TRLO_PULSE_MULTI_TRIG_BUF_CLEAR       0x200000\nset TRLO_PULSE_SERIAL_TSTAMP_BUF_CLEAR  0x20000000\nset TRLO_PULSE_SERIAL_TSTAMP_FAIL_CLEAR 0x40000000\nset TRLO_PULSE_MULTI_LATCH_CLEAR_ALL    0x001e0000\n\n###################################################\n\nwrite a32 d32 ${TRLO_SETUP_MAX_MULTI_TRIG} 0x1\nwrite a32 d32 ${TRLO_PULSE_BASE} ${TRLO_PULSE_MULTI_TRIG_BUF_CLEAR}\nwrite a32 d32 ${TRLO_PULSE_BASE} ${TRLO_PULSE_SERIAL_TSTAMP_BUF_CLEAR}\nwrite a32 d32 ${TRLO_PULSE_BASE} ${TRLO_PULSE_SERIAL_TSTAMP_FAIL_CLEAR}\nwrite a32 d32 ${TRLO_PULSE_BASE} ${TRLO_PULSE_MULTI_LATCH_CLEAR_ALL}"
+                            }
+                        ],
+                        "name": "TRLOII-MULTI-TIMER(4)",
+                        "type": "user05",
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vmeReadout": {
+                            "enabled": true,
+                            "id": "{36c06539-b79e-4769-bf8c-aa002f6db1a1}",
+                            "name": "Module Readout",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# Martin B. 05.12.2024\n# Only change the following line:\n\nset INDEX 4\n\n# Do not touch below.\n\nset TRLO_PULSE_BASE\t 0xa000 # 40960   \nset TRLO_MULTI_LATCH 49152  # 0xc000\nset TRIG_TPAT_ADDR                   0x5000\nset TRLO_PULSE_MULTI_LATCH_CLEAR     131072 # 0x00020000\nset TRLO_PULSE_MUX_SRC_SCALER_LATCH  32     # 0x00000020\nset TRLO_PULSE_TIMER_LATCH           128    # 0x00000080\nset TRLO_PULSE_TRIG_SCALER_LATCH     2      # 0x2\n\nset TRLO_MULTI_LATCH_STATUS          20528 \t# 0x5030\n\nset TRLO_SCALER_MUX_SRC              24892  # 0x613c\nset TRLO_TLATCH_TIMING_TICK          32768  # 0x8000\n\n# Barrier between potential VETAR ahead.\nmarker 0xbeefbabe\n\n# Latch mux-scalers, trig-scalers and 100MHz clock status:\nwrite a32 d32 ${TRLO_PULSE_BASE} 0xa2\n\n# Read the TPAT:\nread a32 d32 ${TRIG_TPAT_ADDR} slow\n\n# Read corresponding ECL's_IN\nread a32 d32 $( ${TRLO_SCALER_MUX_SRC} +  4 * (${INDEX} - 1) ) slow\n\n# Read low 32-bits of latched (trigger) timestamp\nread a32 d32 ${TRLO_TLATCH_TIMING_TICK} slow\n\n# Set mask and shift of the local accumulator (for multi-timing register)\nmvlc_mask_shift_accu 0x000003FF 0 \nmvlc_read_to_accu a32 d32 $( ${TRLO_MULTI_LATCH_STATUS} + 4 * (${INDEX} - 1) ) slow\nread a32 d32 $( ${TRLO_MULTI_LATCH} + 4096 * (${INDEX} - 1) ) slow"
+                        },
+                        "vmeReset": {
+                            "enabled": true,
+                            "id": "{8798cf41-b817-472c-99b3-30e971ec8275}",
+                            "name": "Module Reset",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# Reset the module to a clean default state here. This is executed before\n# initializing the modules at DAQ start time.\n"
+                        }
+                    },
+                    {
+                        "baseAddress": 33554432,
+                        "enabled": true,
+                        "id": "{34acdd91-6f11-4286-9232-b35f5eb4d5f6}",
+                        "initScripts": [
+                            {
+                                "enabled": true,
+                                "id": "{65bf43a8-33fe-4676-8c87-01204929b469}",
+                                "name": "Module Init",
+                                "properties": {
+                                    "icon": ":/vme_script.png"
+                                },
+                                "variable_table": {
+                                    "name": "",
+                                    "variables": {
+                                    }
+                                },
+                                "vme_script": ""
+                            }
+                        ],
+                        "name": "triva7_trigger_reset",
+                        "type": "triva7_trigger_reset",
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vmeReadout": {
+                            "enabled": true,
+                            "id": "{8c1c8712-5b2b-45c3-9d00-ea55a581b10f}",
+                            "name": "Module Readout",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# reset trigger\nwrite A32 D32 0x0000 0x8030 # EV_IRQ_CLEAR | FC_PULSE | DT_CLEAR\n\n\n"
+                        },
+                        "vmeReset": {
+                            "enabled": true,
+                            "id": "{91100661-7d2d-46a0-886f-8f0302a82c18}",
+                            "name": "Module Reset",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# Reset the module to a clean default state here. This is executed before\n# initializing the modules at DAQ start time.\n"
+                        }
+                    }
+                ],
+                "name": "event_6_hardware_trigegr_type_4",
+                "scalerReadoutFrequency": 0,
+                "scalerReadoutPeriod": 2,
+                "triggerCondition": "Interrupt",
+                "triggerOptions": {
+                    "IRQUseIACK": false,
+                    "mvlc.timer_base": "ms",
+                    "mvlc.timer_period": 1000,
+                    "sis3153.timer_period": 1
+                },
+                "variable_table": {
+                    "name": "",
+                    "variables": {
+                        "mesy_eoe_marker": {
+                            "comment": "EndOfEvent marker for mesytec modules (0: eventcounter, 1: timestamp, 3: extended_timestamp).",
+                            "definitionLocation": "",
+                            "value": "1"
+                        },
+                        "mesy_mcst": {
+                            "comment": "The most significant byte of the 32-bit multicast address to be used by this event.",
+                            "definitionLocation": "",
+                            "value": "bf"
+                        },
+                        "mesy_readout_num_events": {
+                            "comment": "Number of events to read out in each cycle.",
+                            "definitionLocation": "",
+                            "value": "1"
+                        },
+                        "sys_irq": {
+                            "comment": "IRQ value set for the VME Controller for this event.",
+                            "definitionLocation": "",
+                            "value": "11"
+                        }
+                    }
+                },
+                "vme_scripts": {
+                    "daq_start": {
+                        "enabled": true,
+                        "id": "{cb9e8df2-1240-44d6-b749-b33268dcda1a}",
+                        "name": "DAQ Start",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "# Start the acquisition sequence for all modules via the events multicast address.\n#writeabs a32 d16 0x${mesy_mcst}00603a      0   # stop acq\n#writeabs a32 d16 0x${mesy_mcst}006090      3   # reset CTRA and CTRB\n#writeabs a32 d16 0x${mesy_mcst}00603c      1   # FIFO reset\n#writeabs a32 d16 0x${mesy_mcst}00603a      1   # start acq\n#writeabs a32 d16 0x${mesy_mcst}006034      1   # readout reset\n"
+                    },
+                    "daq_stop": {
+                        "enabled": true,
+                        "id": "{51bd8d38-0cc4-43b3-a18d-12f1b4cf8f00}",
+                        "name": "DAQ Stop",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "#writeabs a32 d16 0x${mesy_mcst}00603a     0   # stop acquisition\n"
+                    },
+                    "readout_end": {
+                        "enabled": true,
+                        "id": "{03c7943e-83c9-4808-a66c-eeb55311edae}",
+                        "name": "Cycle End",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "# Commands executed at the end of each readout cycle\n# Do a multicast write of the readout_reset register\n#writeabs a32 d16 0x${mesy_mcst}006034      1   # readout reset\n"
+                    },
+                    "readout_start": {
+                        "enabled": true,
+                        "id": "{c198d60e-1e99-4b79-9ad4-34d82cb57b1a}",
+                        "name": "Cycle Start",
+                        "properties": {
+                            "icon": ":/vme_script.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "# Commands executed at the start of each readout cycle\n"
+                    }
+                }
+            }
+        ],
+        "global_objects": {
+            "children": [
+                {
+                    "class": "ContainerObject",
+                    "data": {
+                        "children": [
+                        ],
+                        "enabled": true,
+                        "id": "{4d482a83-623e-4936-857a-3a8f1843f0df}",
+                        "name": "daq_start",
+                        "properties": {
+                            "display_name": "DAQ Start",
+                            "icon": ":/folder_orange.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        }
+                    }
+                },
+                {
+                    "class": "ContainerObject",
+                    "data": {
+                        "children": [
+                        ],
+                        "enabled": true,
+                        "id": "{4588c1e0-2329-456f-9a27-5c9cbdcab8a8}",
+                        "name": "daq_stop",
+                        "properties": {
+                            "display_name": "DAQ Stop",
+                            "icon": ":/folder_orange.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        }
+                    }
+                },
+                {
+                    "class": "ContainerObject",
+                    "data": {
+                        "children": [
+                            {
+                                "class": "VMEScriptConfig",
+                                "data": {
+                                    "enabled": true,
+                                    "id": "{95cfd04c-6c52-43d6-bd1d-711e1e2c0933}",
+                                    "name": "triva trigger reset",
+                                    "properties": {
+                                        "icon": ":/vme_script.png"
+                                    },
+                                    "variable_table": {
+                                        "name": "",
+                                        "variables": {
+                                        }
+                                    },
+                                    "vme_script": "# TRIVA 7, reset Trigger\nsetbase 0x02000000\nwrite A32 D32 0x0000 0x00008020 #= EV_IRQ_CLEAR | FC_PULSE | (DT_CLEAR 0x00000020); # Clear Trigger\n"
+                                }
+                            }
+                        ],
+                        "enabled": true,
+                        "id": "{abeea069-a9a6-4b5e-89a1-2df232a297f6}",
+                        "name": "manual",
+                        "properties": {
+                            "display_name": "Manual",
+                            "icon": ":/folder_orange.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        }
+                    }
+                },
+                {
+                    "class": "VMEScriptConfig",
+                    "data": {
+                        "enabled": true,
+                        "id": "{acca1c33-84ad-4760-b183-3c042189b673}",
+                        "name": "mvlc_trigger_io",
+                        "properties": {
+                            "display_name": "MVLC Trigger/IO",
+                            "icon": ":/vme_module.png"
+                        },
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vme_script": "##############################################################\n# MVLC Trigger I/O  setup via internal VME interface         #\n##############################################################\n\n# Note: This file was generated by mvme. Editing existing\n# values is allowed and these changes will used by mvme\n# when next parsing the script. Changes to the basic\n# structure, like adding new write or read commands, are not\n# allowed. These changes will be lost the next time the file\n# is modified by mvme.\n\n# Internal MVLC VME interface address\nsetbase 0xffff0000\n\n# Level0 #####################################################\n\n# timer0\n0x0200 0x0000    # select L0.Unit0\n0x0302      0    # range (0:ns, 1:us, 2:ms, 3:s)\n0x0304      0    # delay [ns]\n0x0306      0    # period [in range units]\n\n# timer1\n0x0200 0x0001    # select L0.Unit1\n0x0302      0    # range (0:ns, 1:us, 2:ms, 3:s)\n0x0304      0    # delay [ns]\n0x0306      0    # period [in range units]\n\n# timer2\n0x0200 0x0002    # select L0.Unit2\n0x0302      0    # range (0:ns, 1:us, 2:ms, 3:s)\n0x0304      0    # delay [ns]\n0x0306      0    # period [in range units]\n\n# timer3\n0x0200 0x0003    # select L0.Unit3\n0x0302      0    # range (0:ns, 1:us, 2:ms, 3:s)\n0x0304      0    # delay [ns]\n0x0306      0    # period [in range units]\n\n# trigger_resource0\n0x0200 0x0004    # select L0.Unit4\n0x0380      0    # type: 0=IRQ, 1=SoftTrigger, 2=SlaveTrigger\n0x0300      0    # irq_index (zero-based: 0: IRQ1, .., 6: IRQ7)\n0x0306      0    # slave_trigger: delay [ns]\n0x0308      0    # slave_trigger: width [ns]\n0x030a      0    # slave_trigger: holdoff [ns]\n0x030c      0    # slave_trigger: invert (start on trailing edge of input)\n0x0382      0    # slave trigger number (0..3)\n\n# trigger_resource1\n0x0200 0x0005    # select L0.Unit5\n0x0380      0    # type: 0=IRQ, 1=SoftTrigger, 2=SlaveTrigger\n0x0300      0    # irq_index (zero-based: 0: IRQ1, .., 6: IRQ7)\n0x0306      0    # slave_trigger: delay [ns]\n0x0308      0    # slave_trigger: width [ns]\n0x030a      0    # slave_trigger: holdoff [ns]\n0x030c      0    # slave_trigger: invert (start on trailing edge of input)\n0x0382      0    # slave trigger number (0..3)\n\n# trigger_resource2\n0x0200 0x0006    # select L0.Unit6\n0x0380      0    # type: 0=IRQ, 1=SoftTrigger, 2=SlaveTrigger\n0x0300      0    # irq_index (zero-based: 0: IRQ1, .., 6: IRQ7)\n0x0306      0    # slave_trigger: delay [ns]\n0x0308      0    # slave_trigger: width [ns]\n0x030a      0    # slave_trigger: holdoff [ns]\n0x030c      0    # slave_trigger: invert (start on trailing edge of input)\n0x0382      0    # slave trigger number (0..3)\n\n# trigger_resource3\n0x0200 0x0007    # select L0.Unit7\n0x0380      0    # type: 0=IRQ, 1=SoftTrigger, 2=SlaveTrigger\n0x0300      0    # irq_index (zero-based: 0: IRQ1, .., 6: IRQ7)\n0x0306      0    # slave_trigger: delay [ns]\n0x0308      0    # slave_trigger: width [ns]\n0x030a      0    # slave_trigger: holdoff [ns]\n0x030c      0    # slave_trigger: invert (start on trailing edge of input)\n0x0382      0    # slave trigger number (0..3)\n\n# trigger_resource4\n0x0200 0x0008    # select L0.Unit8\n0x0380      0    # type: 0=IRQ, 1=SoftTrigger, 2=SlaveTrigger\n0x0300      0    # irq_index (zero-based: 0: IRQ1, .., 6: IRQ7)\n0x0306      0    # slave_trigger: delay [ns]\n0x0308      0    # slave_trigger: width [ns]\n0x030a      0    # slave_trigger: holdoff [ns]\n0x030c      0    # slave_trigger: invert (start on trailing edge of input)\n0x0382      0    # slave trigger number (0..3)\n\n# trigger_resource5\n0x0200 0x0009    # select L0.Unit9\n0x0380      0    # type: 0=IRQ, 1=SoftTrigger, 2=SlaveTrigger\n0x0300      0    # irq_index (zero-based: 0: IRQ1, .., 6: IRQ7)\n0x0306      0    # slave_trigger: delay [ns]\n0x0308      0    # slave_trigger: width [ns]\n0x030a      0    # slave_trigger: holdoff [ns]\n0x030c      0    # slave_trigger: invert (start on trailing edge of input)\n0x0382      0    # slave trigger number (0..3)\n\n# trigger_resource6\n0x0200 0x000a    # select L0.Unit10\n0x0380      0    # type: 0=IRQ, 1=SoftTrigger, 2=SlaveTrigger\n0x0300      0    # irq_index (zero-based: 0: IRQ1, .., 6: IRQ7)\n0x0306      0    # slave_trigger: delay [ns]\n0x0308      0    # slave_trigger: width [ns]\n0x030a      0    # slave_trigger: holdoff [ns]\n0x030c      0    # slave_trigger: invert (start on trailing edge of input)\n0x0382      0    # slave trigger number (0..3)\n\n# trigger_resource7\n0x0200 0x000b    # select L0.Unit11\n0x0380      0    # type: 0=IRQ, 1=SoftTrigger, 2=SlaveTrigger\n0x0300      0    # irq_index (zero-based: 0: IRQ1, .., 6: IRQ7)\n0x0306      0    # slave_trigger: delay [ns]\n0x0308      0    # slave_trigger: width [ns]\n0x030a      0    # slave_trigger: holdoff [ns]\n0x030c      0    # slave_trigger: invert (start on trailing edge of input)\n0x0382      0    # slave trigger number (0..3)\n\n# stack_busy0\n0x0200 0x000c    # select L0.Unit12\n0x0300      0    # stack_index\n\n# stack_busy1\n0x0200 0x000d    # select L0.Unit13\n0x0300      0    # stack_index\n\n# NIM0\n0x0200 0x0010    # select L0.Unit16\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n0x030a      0    # direction (0:in, 1:out)\n0x0310      0    # output activate\n\n# NIM1\n0x0200 0x0011    # select L0.Unit17\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n0x030a      0    # direction (0:in, 1:out)\n0x0310      0    # output activate\n\n# NIM2\n0x0200 0x0012    # select L0.Unit18\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n0x030a      0    # direction (0:in, 1:out)\n0x0310      0    # output activate\n\n# NIM3\n0x0200 0x0013    # select L0.Unit19\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n0x030a      0    # direction (0:in, 1:out)\n0x0310      0    # output activate\n\n# NIM4\n0x0200 0x0014    # select L0.Unit20\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n0x030a      0    # direction (0:in, 1:out)\n0x0310      0    # output activate\n\n# NIM5\n0x0200 0x0015    # select L0.Unit21\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n0x030a      0    # direction (0:in, 1:out)\n0x0310      0    # output activate\n\n# NIM6\n0x0200 0x0016    # select L0.Unit22\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n0x030a      0    # direction (0:in, 1:out)\n0x0310      0    # output activate\n\n# NIM7\n0x0200 0x0017    # select L0.Unit23\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n0x030a      0    # direction (0:in, 1:out)\n0x0310      0    # output activate\n\n# NIM8\n0x0200 0x0018    # select L0.Unit24\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n0x030a      0    # direction (0:in, 1:out)\n0x0310      0    # output activate\n\n# NIM9\n0x0200 0x0019    # select L0.Unit25\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n0x030a      0    # direction (0:in, 1:out)\n0x0310      0    # output activate\n\n# NIM10\n0x0200 0x001a    # select L0.Unit26\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n0x030a      0    # direction (0:in, 1:out)\n0x0310      0    # output activate\n\n# NIM11\n0x0200 0x001b    # select L0.Unit27\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n0x030a      0    # direction (0:in, 1:out)\n0x0310      0    # output activate\n\n# NIM12\n0x0200 0x001c    # select L0.Unit28\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n0x030a      0    # direction (0:in, 1:out)\n0x0310      0    # output activate\n\n# NIM13\n0x0200 0x001d    # select L0.Unit29\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n0x030a      0    # direction (0:in, 1:out)\n0x0310      0    # output activate\n\n# IRQ1\n0x0200 0x0021    # select L0.Unit33\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n\n# IRQ2\n0x0200 0x0022    # select L0.Unit34\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n\n# IRQ3\n0x0200 0x0023    # select L0.Unit35\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n\n# IRQ4\n0x0200 0x0024    # select L0.Unit36\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n\n# IRQ5\n0x0200 0x0025    # select L0.Unit37\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n\n# IRQ6\n0x0200 0x0026    # select L0.Unit38\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n\n# Level1 #####################################################\n\n# L1.LUT0\n0x0200 0x0100    # select L1.Unit0\n0x0300 0x0000    # cells 0-3\n0x0302 0x0000    # cells 4-7\n0x0304 0x0000    # cells 8-11\n0x0306 0x0000    # cells 12-15\n0x0308 0x0000    # cells 16-19\n0x030a 0x0000    # cells 20-23\n0x030c 0x0000    # cells 24-27\n0x030e 0x0000    # cells 28-31\n0x0310 0x0000    # cells 32-35\n0x0312 0x0000    # cells 36-39\n0x0314 0x0000    # cells 40-43\n0x0316 0x0000    # cells 44-47\n0x0318 0x0000    # cells 48-51\n0x031a 0x0000    # cells 52-55\n0x031c 0x0000    # cells 56-59\n0x031e 0x0000    # cells 60-63\n\n# L1.LUT1\n0x0200 0x0101    # select L1.Unit1\n0x0300 0x0000    # cells 0-3\n0x0302 0x0000    # cells 4-7\n0x0304 0x0000    # cells 8-11\n0x0306 0x0000    # cells 12-15\n0x0308 0x0000    # cells 16-19\n0x030a 0x0000    # cells 20-23\n0x030c 0x0000    # cells 24-27\n0x030e 0x0000    # cells 28-31\n0x0310 0x0000    # cells 32-35\n0x0312 0x0000    # cells 36-39\n0x0314 0x0000    # cells 40-43\n0x0316 0x0000    # cells 44-47\n0x0318 0x0000    # cells 48-51\n0x031a 0x0000    # cells 52-55\n0x031c 0x0000    # cells 56-59\n0x031e 0x0000    # cells 60-63\n\n# L1.LUT2\n0x0200 0x0102    # select L1.Unit2\n0x0300 0x0000    # cells 0-3\n0x0302 0x0000    # cells 4-7\n0x0304 0x0000    # cells 8-11\n0x0306 0x0000    # cells 12-15\n0x0308 0x0000    # cells 16-19\n0x030a 0x0000    # cells 20-23\n0x030c 0x0000    # cells 24-27\n0x030e 0x0000    # cells 28-31\n0x0310 0x0000    # cells 32-35\n0x0312 0x0000    # cells 36-39\n0x0314 0x0000    # cells 40-43\n0x0316 0x0000    # cells 44-47\n0x0318 0x0000    # cells 48-51\n0x031a 0x0000    # cells 52-55\n0x031c 0x0000    # cells 56-59\n0x031e 0x0000    # cells 60-63\n0x0380      0    # connect input0 to 'NIM8'\n0x0382      0    # connect input1 to 'NIM9'\n0x0384      0    # connect input2 to 'NIM10'\n\n# L1.LUT3\n0x0200 0x0103    # select L1.Unit3\n0x0300 0x0000    # cells 0-3\n0x0302 0x0000    # cells 4-7\n0x0304 0x0000    # cells 8-11\n0x0306 0x0000    # cells 12-15\n0x0308 0x0000    # cells 16-19\n0x030a 0x0000    # cells 20-23\n0x030c 0x0000    # cells 24-27\n0x030e 0x0000    # cells 28-31\n0x0310 0x0000    # cells 32-35\n0x0312 0x0000    # cells 36-39\n0x0314 0x0000    # cells 40-43\n0x0316 0x0000    # cells 44-47\n0x0318 0x0000    # cells 48-51\n0x031a 0x0000    # cells 52-55\n0x031c 0x0000    # cells 56-59\n0x031e 0x0000    # cells 60-63\n\n# L1.LUT4\n0x0200 0x0104    # select L1.Unit4\n0x0300 0x0000    # cells 0-3\n0x0302 0x0000    # cells 4-7\n0x0304 0x0000    # cells 8-11\n0x0306 0x0000    # cells 12-15\n0x0308 0x0000    # cells 16-19\n0x030a 0x0000    # cells 20-23\n0x030c 0x0000    # cells 24-27\n0x030e 0x0000    # cells 28-31\n0x0310 0x0000    # cells 32-35\n0x0312 0x0000    # cells 36-39\n0x0314 0x0000    # cells 40-43\n0x0316 0x0000    # cells 44-47\n0x0318 0x0000    # cells 48-51\n0x031a 0x0000    # cells 52-55\n0x031c 0x0000    # cells 56-59\n0x031e 0x0000    # cells 60-63\n\n# L1.LUT5\n0x0200 0x0105    # select L1.Unit5\n0x0300 0x0000    # cells 0-3\n0x0302 0x0000    # cells 4-7\n0x0304 0x0000    # cells 8-11\n0x0306 0x0000    # cells 12-15\n0x0308 0x0000    # cells 16-19\n0x030a 0x0000    # cells 20-23\n0x030c 0x0000    # cells 24-27\n0x030e 0x0000    # cells 28-31\n0x0310 0x0000    # cells 32-35\n0x0312 0x0000    # cells 36-39\n0x0314 0x0000    # cells 40-43\n0x0316 0x0000    # cells 44-47\n0x0318 0x0000    # cells 48-51\n0x031a 0x0000    # cells 52-55\n0x031c 0x0000    # cells 56-59\n0x031e 0x0000    # cells 60-63\n\n# L1.LUT6\n0x0200 0x0106    # select L1.Unit6\n0x0300 0x0000    # cells 0-3\n0x0302 0x0000    # cells 4-7\n0x0304 0x0000    # cells 8-11\n0x0306 0x0000    # cells 12-15\n0x0308 0x0000    # cells 16-19\n0x030a 0x0000    # cells 20-23\n0x030c 0x0000    # cells 24-27\n0x030e 0x0000    # cells 28-31\n0x0310 0x0000    # cells 32-35\n0x0312 0x0000    # cells 36-39\n0x0314 0x0000    # cells 40-43\n0x0316 0x0000    # cells 44-47\n0x0318 0x0000    # cells 48-51\n0x031a 0x0000    # cells 52-55\n0x031c 0x0000    # cells 56-59\n0x031e 0x0000    # cells 60-63\n\n# Level2 #####################################################\n\n# L2.LUT0\n0x0200 0x0200    # select L2.Unit0\n0x0300 0x0000    # cells 0-3\n0x0302 0x0000    # cells 4-7\n0x0304 0x0000    # cells 8-11\n0x0306 0x0000    # cells 12-15\n0x0308 0x0000    # cells 16-19\n0x030a 0x0000    # cells 20-23\n0x030c 0x0000    # cells 24-27\n0x030e 0x0000    # cells 28-31\n0x0310 0x0000    # cells 32-35\n0x0312 0x0000    # cells 36-39\n0x0314 0x0000    # cells 40-43\n0x0316 0x0000    # cells 44-47\n0x0318 0x0000    # cells 48-51\n0x031a 0x0000    # cells 52-55\n0x031c 0x0000    # cells 56-59\n0x031e 0x0000    # cells 60-63\n0x0320 0b0000    # strobed_outputs\n0x0380      0    # connect input0 to 'scaler_timer'\n0x0382      0    # connect input1 to 'scaler_timer'\n0x0384      0    # connect input2 to 'scaler_timer'\n\n# L2.LUT0 strobe gate generator\n0x0332      0    # delay [ns]\n0x0334      8    # width [ns]\n0x0336      0    # holdoff [ns]\n0x0338      0    # invert (start on trailing edge of input)\n0x0386      0    # connect strobe_input to 'scaler_timer'\n\n# L2.LUT1\n0x0200 0x0201    # select L2.Unit1\n0x0300 0x0000    # cells 0-3\n0x0302 0x0000    # cells 4-7\n0x0304 0x0000    # cells 8-11\n0x0306 0x0000    # cells 12-15\n0x0308 0x0000    # cells 16-19\n0x030a 0x0000    # cells 20-23\n0x030c 0x0000    # cells 24-27\n0x030e 0x0000    # cells 28-31\n0x0310 0x0000    # cells 32-35\n0x0312 0x0000    # cells 36-39\n0x0314 0x0000    # cells 40-43\n0x0316 0x0000    # cells 44-47\n0x0318 0x0000    # cells 48-51\n0x031a 0x0000    # cells 52-55\n0x031c 0x0000    # cells 56-59\n0x031e 0x0000    # cells 60-63\n0x0320 0b0000    # strobed_outputs\n0x0380      0    # connect input0 to 'scaler_timer'\n0x0382      0    # connect input1 to 'scaler_timer'\n0x0384      0    # connect input2 to 'scaler_timer'\n\n# L2.LUT1 strobe gate generator\n0x0332      0    # delay [ns]\n0x0334      8    # width [ns]\n0x0336      0    # holdoff [ns]\n0x0338      0    # invert (start on trailing edge of input)\n0x0386      0    # connect strobe_input to 'scaler_timer'\n\n# L2.LUT2\n0x0200 0x0202    # select L2.Unit2\n0x0300 0x0000    # cells 0-3\n0x0302 0x0000    # cells 4-7\n0x0304 0x0000    # cells 8-11\n0x0306 0x0000    # cells 12-15\n0x0308 0x0000    # cells 16-19\n0x030a 0x0000    # cells 20-23\n0x030c 0x0000    # cells 24-27\n0x030e 0x0000    # cells 28-31\n0x0310 0x0000    # cells 32-35\n0x0312 0x0000    # cells 36-39\n0x0314 0x0000    # cells 40-43\n0x0316 0x0000    # cells 44-47\n0x0318 0x0000    # cells 48-51\n0x031a 0x0000    # cells 52-55\n0x031c 0x0000    # cells 56-59\n0x031e 0x0000    # cells 60-63\n0x0320 0b0000    # strobed_outputs\n0x0380      0    # connect input0 to 'scaler_timer'\n0x0382      0    # connect input1 to 'scaler_timer'\n0x0384      0    # connect input2 to 'scaler_timer'\n\n# L2.LUT2 strobe gate generator\n0x0332      0    # delay [ns]\n0x0334      8    # width [ns]\n0x0336      0    # holdoff [ns]\n0x0338      0    # invert (start on trailing edge of input)\n0x0386      0    # connect strobe_input to 'scaler_timer'\n\n# Level3 #####################################################\n\n# StackStart0\n0x0200 0x0300    # select L3.Unit0\n0x0300      0    # activate\n0x0302      0    # stack index\n0x0304      0    # delay [ns]\n0x0380      0    # connect input0 to 'scaler_timer'\n\n# StackStart1\n0x0200 0x0301    # select L3.Unit1\n0x0300      0    # activate\n0x0302      0    # stack index\n0x0304      0    # delay [ns]\n0x0380      0    # connect input0 to 'scaler_timer'\n\n# StackStart2\n0x0200 0x0302    # select L3.Unit2\n0x0300      0    # activate\n0x0302      0    # stack index\n0x0304      0    # delay [ns]\n0x0380      0    # connect input0 to 'scaler_timer'\n\n# StackStart3\n0x0200 0x0303    # select L3.Unit3\n0x0300      0    # activate\n0x0302      0    # stack index\n0x0304      0    # delay [ns]\n0x0380      0    # connect input0 to 'scaler_timer'\n\n# MasterTrigger0\n0x0200 0x0304    # select L3.Unit4\n0x0300      0    # activate\n0x0380      0    # connect input0 to 'scaler_timer'\n\n# MasterTrigger1\n0x0200 0x0305    # select L3.Unit5\n0x0300      0    # activate\n0x0380      0    # connect input0 to 'scaler_timer'\n\n# MasterTrigger2\n0x0200 0x0306    # select L3.Unit6\n0x0300      0    # activate\n0x0380      0    # connect input0 to 'scaler_timer'\n\n# MasterTrigger3\n0x0200 0x0307    # select L3.Unit7\n0x0300      0    # activate\n0x0380      0    # connect input0 to 'scaler_timer'\n\n# Counter0+Timestamper\n0x0200 0x0308    # select L3.Unit8\n0x030e      0    # clear on latch\n0x0380      0    # connect input0 to 'scaler_timer'\n0x0382      0    # connect input1 to 'scaler_timer'\n\n# Counter1\n0x0200 0x0309    # select L3.Unit9\n0x030e      0    # clear on latch\n0x0380      0    # connect input0 to 'scaler_timer'\n0x0382      0    # connect input1 to 'scaler_timer'\n\n# Counter2\n0x0200 0x030a    # select L3.Unit10\n0x030e      0    # clear on latch\n0x0380      0    # connect input0 to 'scaler_timer'\n0x0382      0    # connect input1 to 'scaler_timer'\n\n# Counter3\n0x0200 0x030b    # select L3.Unit11\n0x030e      0    # clear on latch\n0x0380      0    # connect input0 to 'scaler_timer'\n0x0382      0    # connect input1 to 'scaler_timer'\n\n# Counter4\n0x0200 0x030c    # select L3.Unit12\n0x030e      0    # clear on latch\n0x0380      0    # connect input0 to 'scaler_timer'\n0x0382      0    # connect input1 to 'scaler_timer'\n\n# Counter5\n0x0200 0x030d    # select L3.Unit13\n0x030e      0    # clear on latch\n0x0380      0    # connect input0 to 'scaler_timer'\n0x0382      0    # connect input1 to 'scaler_timer'\n\n# Counter6\n0x0200 0x030e    # select L3.Unit14\n0x030e      0    # clear on latch\n0x0380      0    # connect input0 to 'scaler_timer'\n0x0382      0    # connect input1 to 'scaler_timer'\n\n# Counter7\n0x0200 0x030f    # select L3.Unit15\n0x030e      0    # clear on latch\n0x0380      0    # connect input0 to 'scaler_timer'\n0x0382      0    # connect input1 to 'scaler_timer'\n\n# NIM unit connections (Note: NIM setup is done in the Level0 section)\n\n# NIM0\n0x0200 0x0310    # select L3.Unit16\n0x0380      0    # connect input0 to 'data_trig'\n\n# NIM1\n0x0200 0x0311    # select L3.Unit17\n0x0380      0    # connect input0 to 'data_trig'\n\n# NIM2\n0x0200 0x0312    # select L3.Unit18\n0x0380      0    # connect input0 to 'data_trig'\n\n# NIM3\n0x0200 0x0313    # select L3.Unit19\n0x0380      0    # connect input0 to 'data_trig'\n\n# NIM4\n0x0200 0x0314    # select L3.Unit20\n0x0380      0    # connect input0 to 'data_trig'\n\n# NIM5\n0x0200 0x0315    # select L3.Unit21\n0x0380      0    # connect input0 to 'data_trig'\n\n# NIM6\n0x0200 0x0316    # select L3.Unit22\n0x0380      0    # connect input0 to 'data_trig'\n\n# NIM7\n0x0200 0x0317    # select L3.Unit23\n0x0380      0    # connect input0 to 'data_trig'\n\n# NIM8\n0x0200 0x0318    # select L3.Unit24\n0x0380      0    # connect input0 to 'data_trig'\n\n# NIM9\n0x0200 0x0319    # select L3.Unit25\n0x0380      0    # connect input0 to 'data_trig'\n\n# NIM10\n0x0200 0x031a    # select L3.Unit26\n0x0380      0    # connect input0 to 'data_trig'\n\n# NIM11\n0x0200 0x031b    # select L3.Unit27\n0x0380      0    # connect input0 to 'data_trig'\n\n# NIM12\n0x0200 0x031c    # select L3.Unit28\n0x0380      0    # connect input0 to 'data_trig'\n\n# NIM13\n0x0200 0x031d    # select L3.Unit29\n0x0380      0    # connect input0 to 'data_trig'\n\n# LVDS0\n0x0200 0x031e    # select L3.Unit30\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n0x0310      0    # output activate\n0x0380      0    # connect input0 to 'data_trig'\n\n# LVDS1\n0x0200 0x031f    # select L3.Unit31\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n0x0310      0    # output activate\n0x0380      0    # connect input0 to 'data_trig'\n\n# LVDS2\n0x0200 0x0320    # select L3.Unit32\n0x0300      0    # delay [ns]\n0x0302      0    # width [ns]\n0x0304      0    # holdoff [ns]\n0x0306      0    # invert (start on trailing edge of input)\n0x0310      0    # output activate\n0x0380      0    # connect input0 to 'data_trig'\n\n##############################################################\n# MVLC Trigger I/O specific meta information                 #\n##############################################################\nmeta_block_begin mvlc_trigger_io\nnames:\n  level0:\n    0: scaler_timer\n    1: timer1\n    2: timer2\n    3: timer3\n    4: irq4\n    5: irq15\n    6: irq14\n    7: irq8\n    8: irq9\n    9: trigger_resource5\n    10: trigger_resource6\n    11: trigger_resource7\n    12: stack_busy0\n    13: stack_busy1\n    14: sysclk\n    15: daq_start\n    16: mon_master_irq\n    17: mon_start_irq\n    18: mon_stop_irq\n    19: mon_data_irq\n    20: mon_scaler_irq\n    21: NIM5\n    22: NIM6\n    23: NIM7\n    24: NIM8\n    25: NIM9\n    26: NIM10\n    27: NIM11\n    28: NIM12\n    29: mdpp_trig_in\n    30: <unused>\n    31: <unused>\n    32: <unused>\n    33: IRQ1\n    34: IRQ2\n    35: IRQ3\n    36: IRQ4\n    37: IRQ5\n    38: IRQ6\n  level1:\n    0:\n      0: L1.LUT0.OUT0\n      1: L1.LUT0.OUT1\n      2: L1.LUT0.OUT2\n    1:\n      0: L1.LUT1.OUT0\n      1: L1.LUT1.OUT1\n      2: L1.LUT1.OUT2\n    2:\n      0: mdpp_trig\n      1: L1.LUT2.OUT1\n      2: L1.LUT2.OUT2\n    3:\n      0: L1.LUT3.OUT0\n      1: L1.LUT3.OUT1\n      2: L1.LUT3.OUT2\n    4:\n      0: mdpp_trig\n      1: L1.LUT4.OUT1\n      2: L1.LUT4.OUT2\n    5:\n      0: L1.LUT5.OUT0\n      1: L1.LUT5.OUT1\n      2: L1.LUT5.OUT2\n    6:\n      0: L1.LUT6.OUT0\n      1: L1.LUT6.OUT1\n      2: L1.LUT6.OUT2\n  level2:\n    0:\n      0: data_trig\n      1: scaler_trig\n      2: irq4\n    1:\n      0: irq14\n      1: irq15\n      2: irq8\n    2:\n      0: irq9\n      1: L2.LUT2.OUT1\n      2: L2.LUT2.OUT2\n  level3:\n    0: StackStart0\n    1: StackStart1\n    2: StackStart2\n    3: StackStart3\n    4: MasterTrigger0\n    5: MasterTrigger1\n    6: MasterTrigger2\n    7: MasterTrigger3\n    8: Counter0+Timestamper\n    9: Counter1\n    10: Counter2\n    11: Counter3\n    12: Counter4\n    13: Counter5\n    14: Counter6\n    15: Counter7\n    30: triva_t1\n    31: triva_t2\n    32: triva_t3\n    33: <not connected>\nsettings:\n  level0:\n    0:\n      soft_activate: false\n    1:\n      soft_activate: false\n    2:\n      soft_activate: false\n    3:\n      soft_activate: false\n  level3:\n    8:\n      soft_activate: false\n    9:\n      soft_activate: false\n    10:\n      soft_activate: false\n    11:\n      soft_activate: false\n    12:\n      soft_activate: false\n    13:\n      soft_activate: false\n    14:\n      soft_activate: false\n    15:\n      soft_activate: false\nmeta_block_end"
+                    }
+                }
+            ],
+            "enabled": true,
+            "id": "{97940f33-7877-4d64-9d6e-d98ba8a80148}",
+            "name": "global_objects",
+            "properties": {
+                "display_name": "Global Objects",
+                "icon": ":/vme_global_scripts.png"
+            },
+            "variable_table": {
+                "name": "",
+                "variables": {
+                }
+            }
+        },
+        "id": "{aae431f4-78a4-495c-827e-b3302e26ac8f}",
+        "name": "",
+        "properties": {
+            "version": 4
+        },
+        "variable_table": {
+            "name": "",
+            "variables": {
+            }
+        },
+        "vme_controller": {
+            "settings": {
+                "method": "first",
+                "mvlc_eth_enable_jumbos": false,
+                "mvlc_hostname": "MVLC-0066."
+            },
+            "type": "MVLC_USB"
+        }
+    }
+}

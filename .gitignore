@@ -1,0 +1,17 @@
+*.lmd
+*.root
+mc_gen*
+gen_*
+obj_*
+*.dep
+microspill
+tmp*
+temp*
+*.txt
+*.swp
+*.swo
+*.o
+.nfs*
+ext_struct.hh
+utils/data_printer
+data_printer
