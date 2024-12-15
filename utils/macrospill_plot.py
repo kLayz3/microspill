@@ -9,6 +9,10 @@ import math
 from datetime import datetime
 from math import floor,ceil
 
+if '--help' in sys.argv:
+    print("Usage: {}\n\t--small\tPrints smaller sized plots")
+    exit
+
 colours = ["tomato", "greenyellow", "skyblue", "magenta"]
 
 times = []
@@ -16,7 +20,10 @@ curr_time = 0
 values = [[0], [0], [0], [0]]
 
 axes = []
-fig, axs = plt.subplots(2,2, figsize=(16,11))
+figsize = (16,11)
+if '--small' in sys.argv:
+    figsize=(10,7)
+fig, axs = plt.subplots(2,2, figsize=figsize)
 axes = axs.flatten();
 
 xscale = 1.0

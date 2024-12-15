@@ -98,8 +98,15 @@ def yticks(y):
     return vals, names, minor_ticks
 
 def main():
+    if '--help' in sys.argv:
+        print("Usage: {}\n\t--small\tPrints smaller sized plots")
+        exit
+
     axes = []
-    fig, axs = plt.subplots(2,2, figsize=(16,11))
+    figsize = (16,11)
+    if '--small' in sys.argv:
+        figsize=(10,7)
+    fig, axs = plt.subplots(2,2, figsize=figsize)
     axes = axs.flatten();
     for i in range(0,4):
         axes[i].set_title("Real-time ECL_IN({}) microspill".format(i+1))
@@ -120,7 +127,7 @@ def main():
     
     colours = ["tomato", "greenyellow", "skyblue", "magenta"]
     plt.ion()
-    
+     
     try:
         for line in sys.stdin:
             line = line.split();
