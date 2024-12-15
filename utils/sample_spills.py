@@ -2,6 +2,7 @@
 
 import os,sys
 import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 import numpy as np
 import copy
 import re
@@ -9,11 +10,8 @@ from math import log10, exp
 import math
 from datetime import datetime
 from math import floor,ceil
-import array as arr
-# For a list, e.g. [0,0,... 0, a1, a2, 0, a3, ... aN, 0, 0, ... 0]
-# With bunch of trailing and leading 0's, slice them out but keep last remaining
-# (possible) zero's on both sides.
 
+# Used to gracefully handle log(0) in histograms.
 epsilon = 0.30103
 def llog10(x):
     if(x == 0):
@@ -21,6 +19,9 @@ def llog10(x):
     else:
         return log10(x) + epsilon
 
+# For a list, e.g. [0,0,... 0, a1, a2, 0, a3, ... aN, 0, 0, ... 0]
+# With bunch of trailing and leading 0's, slice them out but keep last remaining
+# (possible) zero's on both sides.
 def splice_zeros(l):
     n0_right = 0
     n0_left = 0
@@ -80,7 +81,7 @@ def xticks(x):
 
 # for y ticks, value 0 => 0, value 1 => log(2), value N = log(N)+log(2)
 def yticks(y):
-    minx = 0
+    minx = 0    
     maxx = max(y)*1.08
     vals = np.arange(minx, floor(maxx)+1) + epsilon;
     names = []
@@ -160,10 +161,10 @@ def main():
                 if(N0 > 10 and T_total > 10):
                     ps = [poisson_log_expected(index, N0, T_total, nbins, M) for index in bin_indices]
                     prediction_x = [maxx[i]/bins[i] * (x + 0.5) - 8 for x in bin_indices]
-                    a.plot(prediction_x, ps, linestyle='--', color='navy', linewidth=2, zorder=4, label = "Ideal Poisson".format(N0*1e5/T_total))
-                    a.fill_between(prediction_x, ps, color='navy', alpha=0.15, zorder=2)
+                    a.plot(prediction_x, ps, linestyle='--', color='navy', linewidth=2.8, zorder=4, label = "Ideal Poisson".format(N0*1e5/T_total))
+                    a.fill_between(prediction_x, ps, color='navy', alpha=0.2, zorder=2)
                 a.text(0.86, 0.7, 
-                    "Counted: {:.1f}k\nTime: {:.1f}s\nOverflow: {:d}\nLost: {:d}".format(counted[i]/1e3, elapsed_time_10ns[i]/1e8, overflows[i], abs(ecl_diff[i] - counted[i])), 
+                    "Counted: {:.1f}k\nTime: {:.2f}s\nOverflow: {:d}\nLost: {:d}".format(counted[i]/1e3, elapsed_time_10ns[i]/1e8, overflows[i], abs(ecl_diff[i] - counted[i])), 
                     ha='left', va='center', transform = a.transAxes,
                     bbox=dict(facecolor='lightyellow', edgecolor='black', alpha=0.66, capstyle='round'),fontsize='medium', fontweight='semibold')
 

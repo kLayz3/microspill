@@ -27,6 +27,8 @@
 #include "colour-coding.hh" 
 #include "ext_struct.hh"
 
+//#define ONLY_MICROSPILL
+
 #include <chrono>
 template <
 	class result_t   = std::chrono::milliseconds,
@@ -189,7 +191,7 @@ public:
 
 	void fill(T* event) {
 		FOR(i, event->DELTA_T) {
-			uint32_t x = floor(nbins * llog10(event->DELTA_Tv[i]) / max_range_log);
+			uint32_t x = floor(nbins * log10(event->DELTA_Tv[i]) / max_range_log);
 			if(x >= nbins) ++overflows;
 			else ++arr[x];
 		}
@@ -344,6 +346,7 @@ int main(int argc,char *argv[]) {
 	/* Event fetcher thread. */
 	std::thread t1 ( 
 		[&q_micro, &q_macro, &client] {
+			WARN("Thread 1 Spawned.\n");
 			EXT_STR_h101 event; // shadows the outside `event`.
 
 			for (;;) {
@@ -440,13 +443,93 @@ int main(int argc,char *argv[]) {
 		}
 	);
 
-	/* Macrospill thread. 4L8er */	
+	/* Macrospill thread. */	
 	std::thread t3 ( 
 		[&q_macro] {
 			WARN("Thread 3 Spawned.\n");
 			EXT_STR_h101 event;
+			
+			/* Make a scaler out of each ECL_IN(x); */
+			uint32_t counted[4] = {0};
+			uint32_t offspill_counted[4] = {0};
+			uint32_t ts_inc = 0;
+			uint32_t print_every = static_cast<uint32_t>(0.1 * clock_freq); /* In 10ns units. */
+			
+			Scaler<> clock;
+			uint32_t ts_bos = 0;
+			uint32_t ts_eos = 0;
+			bool is_in_spill = false;
+			bool is_first_after_bos[4] = {0};
+			
 			for(;;) {
 				 event = q_macro.pop();
+#ifdef ONLY_MICROSPILL
+				 continue;
+#endif
+				 int trig = event.TRIGGER;
+				 int i = trig - 1; /* 0,1,2,3 ; 12,13*/
+				 if(trig == 12) { /* BoS. Start counting again. */
+					is_in_spill = true;
+					ts_bos = event.VULOM_CLOCK;
+					memset(is_first_after_bos, 0, sizeof(is_first_after_bos));
+					println("--MACRO RESET");
+
+					/* Add the counted from ECL_IN(1) to offspill counter. */
+					offspill_counted[0] += event.ECL_INCREMENT;
+
+					/* Set the clock counter. */
+					clock.assign(event.VULOM_CLOCK);
+					fflush(stdout);
+					continue;
+				 }
+				 else if(trig == 13) { /* EoS: don't fill main counter or count time. */
+					is_in_spill = false;
+					ts_eos = event.VULOM_CLOCK;
+					printf("--MACRO EOS SPILL_TIME:%.4f", Scaler<>::calc_diff(ts_eos, ts_bos)/1e8);
+					FOR(j,4) printf(" INDEX:%d:OFFSPILL_COUNTED:%d", j+1, offspill_counted[j]);
+					memset(offspill_counted, 0, sizeof(offspill_counted));
+					printf("\n");
+					
+					/* Start counting offspills from this point on. */
+					memset(offspill_counted, 0, sizeof(offspill_counted));
+					fflush(stdout);
+					continue;
+				 }
+				
+				 if(!is_in_spill) {
+					 offspill_counted[i] += event.ECL_INCREMENT;
+					 continue;
+				 }
+				 else {
+					 if(is_first_after_bos[i]) {
+						/* Check in the FIFO, roughly which hits got received after BoS. */
+						uint32_t ts_trig = event.VULOM_CLOCK;
+						int ahead = Scaler<>::calc_diff(ts_trig, ts_bos);
+						for(int j=event.DELTA_T-1; j>=0; --j) { /* Don't judge me, friends. */
+							ahead -= (int)event.DELTA_Tv[j];
+							if(ahead > 0) counted[i]++;
+							else offspill_counted[i]++;
+						}
+						is_first_after_bos[i] = false;
+					 }
+					 else {
+						counted[i] += event.ECL_INCREMENT;
+					 }
+				 }
+				/* event.TS_INCRMENT counts elapsed since last of a specific trigger type. 
+				 * Instead, count time directly from any trigger. Based on `event.VULOM_CLOCK`. */
+				 clock.assign(event.VULOM_CLOCK);
+				 if(clock.is_in_init()) continue;
+
+				 ts_inc += clock.calc_increment();
+
+				 if(ts_inc > print_every) {
+					 printf("--MACRO ELAPSED_TIME:%.2f", ts_inc/1e8);
+					 FOR(i,4) printf(" INDEX:%d:COUNTED:%d", i+1, counted[i]);
+					 printf("\n");
+					 memset(counted, 0, sizeof(counted));
+					 ts_inc = 0;
+				 }
 			}
 		}
 	);
