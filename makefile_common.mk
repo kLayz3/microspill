@@ -29,8 +29,7 @@ endif
 #export CXX
 
 .PHONY: all
-all: build
-
+all: klayze
 
 #########################################################
 # Submakefiles that the programs depend on
@@ -93,6 +92,10 @@ CLEAN_TARGETS+=$(addprefix clean_,$(TARGETS))
 ALIAS_TARGETS=$(addprefix alias_,$(ALIASES))
 UNALIAS_TARGETS=$(addprefix unalias_,$(ALIASES))
 
+.PHONY: klayze
+klayze: build
+	$(MAKE) -C utils
+
 .PHONY: build
 build: $(BUILD_TARGETS) aliases
 
@@ -100,7 +103,7 @@ build: $(BUILD_TARGETS) aliases
 test: $(TEST_TARGETS)
 
 .PHONY: clean
-clean: $(CLEAN_TARGETS) clean_aliases
+clean: $(CLEAN_TARGETS) clean_aliases clean_klayze
 
 .PHONY: aliases
 aliases: $(ALIAS_TARGETS)
@@ -108,5 +111,9 @@ aliases: $(ALIAS_TARGETS)
 .PHONY: clean_aliases
 clean_aliases: $(UNALIAS_TARGETS)
 
+.PHONY: clean_klayze
+clean_klayze:
+	$(MAKE) -C utils cclean
+	rm ./data_printer -f
 debug:
 	@echo "UCESB_BASE_DIR = $(UCESB_BASE_DIR)"

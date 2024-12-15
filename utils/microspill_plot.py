@@ -103,8 +103,8 @@ def main():
     axes = axs.flatten();
     for i in range(0,4):
         axes[i].set_title("Real-time ECL_IN({}) microspill".format(i+1))
-        axes[i].set_xlabel("log(t)")
-        axes[i].set_ylabel("Count")
+        axes[i].set_xlabel(r"$\log(t)$", fontsize=13)
+        axes[i].set_ylabel("Count", fontsize=12)
     n0_left = 1
     n0_right = 0
     i=0
@@ -160,7 +160,7 @@ def main():
                 M = maxx[i]
                 if(N0 > 10 and T_total > 10):
                     ps = [poisson_log_expected(index, N0, T_total, nbins, M) for index in bin_indices]
-                    prediction_x = [maxx[i]/bins[i] * (x + 0.5) - 8 for x in bin_indices]
+                    prediction_x = [maxx[i]/bins[i] * (x + 0.5) - 8 + bar_width / 2 for x in bin_indices]
                     a.plot(prediction_x, ps, linestyle='--', color='navy', linewidth=2.8, zorder=4, label = "Ideal Poisson".format(N0*1e5/T_total))
                     a.fill_between(prediction_x, ps, color='navy', alpha=0.2, zorder=2)
                 a.text(0.86, 0.7, 
@@ -182,6 +182,8 @@ def main():
                 a.tick_params(axis='y', which='minor', length=4, width=1, direction='in')
                 a.spines['top'].set_visible(False) 
                 a.spines['right'].set_visible(False) 
+                a.set_xlabel(r"$\Delta t$", fontsize=15, loc='right')
+                a.set_ylabel("Count", fontsize=13)
                 a.legend()
                 plt.pause(0.1);
             else:
@@ -197,7 +199,7 @@ def main():
                     elif(sub[0] == "INDEX" ):
                         i = int(sub[1]) - 1
                     elif(sub[0] == "HIST"):
-                        if(sub[1].isdigit):
+                        if(sub[1].isdigit()):
                             sub[1] = "ECL_IN(" + sub[1] + ")"
                         hist_name[i] = sub[1]
                     elif(sub[0] == "NBINS"):

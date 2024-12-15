@@ -15,6 +15,7 @@
 #include <shared_mutex>
 #include <queue>
 #include <condition_variable>
+#include <atomic>
 
 #include <unistd.h>
 #include <signal.h>
@@ -121,6 +122,9 @@ public:
 	}
 };
 
+/* A flag, that a printing thread has to respect. */
+std::atomic<bool> is_printing(false);
+
 class EventQueue {
 	using T = EXT_STR_h101;
 	std::queue<T> queue;
@@ -224,17 +228,14 @@ void sig_callback_handler(int signum) {
 int main(int argc,char *argv[]) {
 	char _help[2048] = {'\0'};
 	sprintf(_help, \
-	"\nThis program serves as a mimic of the " KB_YEL "--mux-src-scalers" KNRM " (default) or " KB_YEL "--trig-status" KNRM " utility of TRLO-II, taking the data directly from fresh LMD data stream.\n"
-	"Requires Trigger Type = 2 event. Check README.\n"
-	"During printout, in green is the date information derived from local (Linux) systemtime, "
-	"while in cyan from Whiterabbit, if provided.\n\n"
+	"\nThis program serves to capture and compress the output of " KGRN "../microspill" KNRM " struct writer. Check README.\n"
+	"It will by default print to stdout, which can then be piped into different programs or file handles.\n"
+	"Microspill summary is always sent at end-of-spill (EoS) event.\n"
 	"Usage: " "%s SERVER" KCYN " [OPT]" KNRM "\n\n"
 	"Optional OPTs can be passed as --tag=value (GNU style) or -tag value (Windows style).\n"
 	"  --port                       Specify which port to connect to. Can be left empty.\n"
-	"  --ptn=value                  Print the accumulated histograms every `value` seconds. Can be decimal. Default every 1s.\n"
-	"                                 - No value supplied (just --ptn) means BoS and EoS signals are provided.\n"
-	"  --trig-status                Show the trigger-logic (TPAT) and deadtime status instead.\n"
-	"  --alias(i)=\"new\"           Alias the channel (i) to a new name `name`.\n"
+	"  --alias_i=name               Alias the channel ECL_IN(i) to a new name `name`, where i = 1,2,3 or 4.\n"
+	"                               Do not use whitespaces inside the (quoted) name. They will be stripped.\n"
 	"  --help                       Print this message.\n\n",
 	argv[0]);
 			/* Fetch an event. */
@@ -243,16 +244,6 @@ int main(int argc,char *argv[]) {
 		printf("%s", _help); return 0;
 	}
 	
-	if(IsCmdArg("col", argc, argv)) {
-		println("List of available colours and their associated codes for %s%s%s", KBH_GRN, argv[0], KNRM);
-		println("Code is case-insensitive.\n");
-		sample_colour_text();
-		println(BOLD "\nExample usage: \n" KNRM
-			"%s localhost --alias=\"ECL_IN(1):physics:bh_cyn\"\n"
-			"%s localhost --alias=\"ACCEPT_TRIG(1)::b_grn\"\n", argv[0], argv[0]);
-		return 0;
-	}
-
 	ext_data_clnt_stderr client;
 	int ok;
 	EXT_STR_h101 event;
@@ -294,16 +285,27 @@ int main(int argc,char *argv[]) {
 		exit(1);
 	}
 
-	bool no_bos_eos = 0;
-	double print_period = 1.0; // Seconds;
-	if(IsCmdArg("ptn", argc, argv)) {
-		print_period = 0.1;
-	} else if(ParseCmdLine("ptn", parse_str, argc, argv)) {
-		print_period = atof(parse_str.c_str());
-		if(print_period  <= 0.0) print_period = 1.0;
-		else if(print_period < 0.1) print_period = 0.1;
+	/* Handle all the aliasing. */
+	std::string alias[4];
+
+	for(int i=0; i<=3; ++i) {
+		char lhs[10];
+		sprintf(lhs, "alias_%d", i+1);
+		if(ParseCmdLine(lhs, parse_str, argc, argv)) {
+			// Trim whitespaces and ':'.
+			parse_str.erase(std::remove_if(parse_str.begin(), parse_str.end(), 
+				[](char c) { return std::isspace(c) || c == ':'; }), parse_str.end());
+			if(parse_str.size() > 31) {
+				YELL("\nReally .. You need such a big name '%s' for ECL_IN(%d)? Too long, ignoring it. Max char length is 31. \n\n", parse_str.c_str(), i+1);
+				continue;
+			}
+			alias[i] = parse_str;
+		}
 	}
-	
+
+	/* TODO: allow handling of data without BOS/EOS,.. just based on a set time interval. */
+	bool no_bos_eos = 0;
+		
 	if (! client.setup(NULL, 0,
 				&struct_info, &struct_map_success,
 				sizeof(event),
@@ -333,6 +335,7 @@ int main(int argc,char *argv[]) {
 	}
 
 	srand(time(NULL));
+	using milliseconds = std::chrono::milliseconds;	
 
 	/* By default, the ucesb LMD servers (stream/trans) ships events fastest every 1 seconds,
 	 * with --flush=1 flag passed. Therefore, we calculate time difference
@@ -362,10 +365,17 @@ int main(int argc,char *argv[]) {
 	
 	/* Microspill thread. */
 	std::thread t2 (
-		[&q_micro, no_bos_eos] {
+		[&q_micro, no_bos_eos,
+			&alias] {
 			WARN("Thread 2 Spawned.\n");
 			MicrospillHist<> hist[4];
-			FOR(i,4) sprintf(hist[i].name, "%d", i+1);
+			FOR(i,4) {
+				if(alias[i].size() > 0) 
+					strcpy(hist[i].name, alias[i].c_str());
+				else
+					sprintf(hist[i].name, "%d", i+1);
+			}
+
 			EXT_STR_h101 event;
 			uint32_t ttype;
 			int bos_counter = 0;
@@ -408,19 +418,24 @@ int main(int argc,char *argv[]) {
 						if(clock_gettime(CLOCK_REALTIME, &sys_ts) == 0) {
 							ts = sys_ts.tv_nsec + (uint64_t)sys_ts.tv_sec * 1000000000ULL;
 						} else {
-							WARN("Error "); perror("clocl_gettime");
+							WARN("Error "); perror("clock_gettime");
 						}
 					}
 					else {
 						ts = (((uint64_t)(event.WR_HI) << 32) | (uint64_t)event.WR_LO)
 							- 1000000000ULL*( LEAP_SECONDS + TAI_AHEAD_OF_UTC);
 					}
+					/* Printing only done at type=13.
+					 * Spin around until it's safe to print. */
+					while(is_printing.exchange(true)) std::this_thread::sleep_for(milliseconds(1));
+
 					println("TS:%lu", ts);
 					FOR(i,4) {
 						int diff = Scaler<>::calc_diff(scaler_end[i], scaler_start[i]);
 						int ts_diff = Scaler<>::calc_diff(scaler_end_ts[i], scaler_start_ts[i]);
 						hist[i].print(i+1, diff, ts_diff);
 					}
+					is_printing.store(false);
 				}
 				// Types 1-4
 				else {
@@ -452,8 +467,8 @@ int main(int argc,char *argv[]) {
 			/* Make a scaler out of each ECL_IN(x); */
 			uint32_t counted[4] = {0};
 			uint32_t offspill_counted[4] = {0};
-			uint32_t ts_inc = 0;
-			uint32_t print_every = static_cast<uint32_t>(0.1 * clock_freq); /* In 10ns units. */
+			int64_t ts_inc = 0LL;
+			int64_t print_every = static_cast<int64_t>(0.1 * clock_freq); /* In 10ns units. */
 			
 			Scaler<> clock;
 			uint32_t ts_bos = 0;
@@ -471,31 +486,47 @@ int main(int argc,char *argv[]) {
 				 if(trig == 12) { /* BoS. Start counting again. */
 					is_in_spill = true;
 					ts_bos = event.VULOM_CLOCK;
-					memset(is_first_after_bos, 0, sizeof(is_first_after_bos));
+					FOR(i,4) is_first_after_bos[i] = true;
+					
+					 /* Spin around until it's safe to print. */
+					while(is_printing.exchange(true)) std::this_thread::sleep_for(milliseconds(1));
 					println("--MACRO RESET");
-
+					is_printing.store(false);
+					
 					/* Add the counted from ECL_IN(1) to offspill counter. */
 					offspill_counted[0] += event.ECL_INCREMENT;
 
 					/* Set the clock counter. */
 					clock.assign(event.VULOM_CLOCK);
-					fflush(stdout);
 					continue;
 				 }
 				 else if(trig == 13) { /* EoS: don't fill main counter or count time. */
 					is_in_spill = false;
 					ts_eos = event.VULOM_CLOCK;
+
+					/* Handle last remaining hits. */
+					counted[0] += event.ECL_INCREMENT;
+					clock.assign(ts_eos);
+					ts_inc += clock.calc_increment();
+
+					while(is_printing.exchange(true)) std::this_thread::sleep_for(milliseconds(1));
+
+					printf("--MACRO ELAPSED_TIME:%.3f", ts_inc/1e8);
+					FOR(i,4) printf(" INDEX:%d:COUNTED:%d", i+1, counted[i]);
+					printf("\n");
 					printf("--MACRO EOS SPILL_TIME:%.4f", Scaler<>::calc_diff(ts_eos, ts_bos)/1e8);
 					FOR(j,4) printf(" INDEX:%d:OFFSPILL_COUNTED:%d", j+1, offspill_counted[j]);
-					memset(offspill_counted, 0, sizeof(offspill_counted));
-					printf("\n");
+					printf("\n");	
+					
+					is_printing.store(false);
+
+					memset(counted, 0, sizeof(counted));
+					ts_inc = 0;
 					
 					/* Start counting offspills from this point on. */
 					memset(offspill_counted, 0, sizeof(offspill_counted));
-					fflush(stdout);
 					continue;
 				 }
-				
 				 if(!is_in_spill) {
 					 offspill_counted[i] += event.ECL_INCREMENT;
 					 continue;
@@ -523,10 +554,13 @@ int main(int argc,char *argv[]) {
 
 				 ts_inc += clock.calc_increment();
 
-				 if(ts_inc > print_every) {
-					 printf("--MACRO ELAPSED_TIME:%.2f", ts_inc/1e8);
+				 if(ts_inc > print_every) { 
+					 while(is_printing.exchange(true)) std::this_thread::sleep_for(milliseconds(1));
+					 printf("--MACRO ELAPSED_TIME:%.3f", ts_inc/1e8);
 					 FOR(i,4) printf(" INDEX:%d:COUNTED:%d", i+1, counted[i]);
 					 printf("\n");
+					 is_printing.store(false);
+
 					 memset(counted, 0, sizeof(counted));
 					 ts_inc = 0;
 				 }

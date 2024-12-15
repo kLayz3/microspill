@@ -1,0 +1,118 @@
+/* ECL_IN(1-4) get the signal that needs to be spill-analysed. 
+ * A requirement is also a spill gate. If no such gate is present, 
+ * execute the `beam_gate_mimic` section and take from there. */
+
+misc_out      = LEMO_OUT(1);
+acc_pulse_out = LEMO_OUT(2);
+
+in_bos     = ECL_IN(7);
+in_eos     = ECL_IN(8);
+
+/* Don't touch. */
+SECTION(triva) {
+	fast_busy_len = 1000ns;
+	DEADTIME_IN(1) = ECL_IO_IN(4);
+	ECL_IO_OUT(1) = ENCODED_TRIG(1);
+	ECL_IO_OUT(2) = ENCODED_TRIG(2);
+	ECL_IO_OUT(3) = ENCODED_TRIG(3);
+	ECL_IO_OUT(4) = ENCODED_TRIG(4);
+
+	FRONT_LED(1) = TRIMI_TDT;
+	FRONT_LED(2) = MASTER_START;
+	accept_window_len = 10 ns;
+}
+
+/* Don't touch. All the signals are 
+ * prealigned in the unpacker. */
+SECTION(timing) {
+	all_or_mask(1) = ECL_IN(1) | ACCEPT_TRIG[12] | ACCEPT_TRIG[13];
+
+	TIMER_LATCH(1) = ALL_OR(1);
+	TIMER_LATCH(2) = ECL_IN(2);
+	TIMER_LATCH(3) = ECL_IN(3);
+	TIMER_LATCH(4) = ECL_IN(4);	
+	TIMER_LATCH(4) = ECL_IN(4);	
+
+	timer_latch_mode(1) = LEADING_EDGE;
+	timer_latch_mode(2) = LEADING_EDGE;
+	timer_latch_mode(3) = LEADING_EDGE;
+	timer_latch_mode(4) = LEADING_EDGE;
+
+	multi_latch_control(1) = ALM_FULL_LEVEL(max);
+	multi_latch_control(2) = ALM_FULL_LEVEL(max);
+	multi_latch_control(3) = ALM_FULL_LEVEL(max);
+	multi_latch_control(4) = ALM_FULL_LEVEL(max);
+
+	/* Weird edge case: Assume ECL_IN(2) perfectly shadows ECL_IN(1).
+	 * From the trigger state machine, in that case always
+	 * TYPE=2 gets encoded (priority) and sent, thus never clearing the buffer for type=1 (in the readout loop).
+	 * Full buffer shoots out a signal - pend that; but then another edge case: 
+	 * - if the trigger just before was, say type=1, cleared the FIFO, then the immediately pended TRIG(1) could
+	 * potentially read-out an empty fifo, thus crashing... best we can do then is always send ACCEPT_TRIG[i] into
+	 * channel(i) as well, and then later in analysis mark this hit as dummy.
+	 * Simply because it will always have a systematic offset (+- 5 clk cycles) relative to latched VULOM time,
+	 * - depending if it came from fast_path (via TPAT) or from pending trigger. This is what the TPAT read tells us. */
+	 /* NOTE: this hasn't been implemented yet.. was some problems with having a dummy peak in deltaT = 20* (10ns) for 
+	  * some reason.. More careful investigations are necessary. */
+
+	TRIG_LMU_OUT(1) = ECL_IN(1);
+	TRIG_LMU_OUT(2) = ECL_IN(2);
+	TRIG_LMU_OUT(3) = ECL_IN(3);
+	TRIG_LMU_OUT(4) = ECL_IN(4);
+
+	tpat_trig(1) = 1;
+	tpat_trig(2) = 2;
+	tpat_trig(3) = 3;
+	tpat_trig(4) = 4;
+	
+	tpat_enable = mask 0xf;
+
+	/* Backup triggers. */
+	TRIG_PENDING[1] = MULTI_LATCH_ALM_FULL(1);
+	TRIG_PENDING[2] = MULTI_LATCH_ALM_FULL(2);
+	TRIG_PENDING[3] = MULTI_LATCH_ALM_FULL(3);
+	TRIG_PENDING[4] = MULTI_LATCH_ALM_FULL(4);
+	
+	/* BoS/EoS. In MVLC they are mapped to readout scheme for TRIG=1. */
+	TRIG_PENDING[12] = in_bos;
+	TRIG_PENDING[13] = in_eos;
+
+	LMU_IN(1) = ACCEPT_PULSE;
+	LMU_OUT(1) = LMU_IN(1);
+	lmu_restart_mode(1) = LEADING_EDGE | GATE_ENABLE;
+	lmu_stretch(1) = 100 ns;
+	acc_pulse_out = LMU_OUT(1);
+}
+
+pulser_freq = 100 kHz;
+SECTION(pulser_test) {
+	prng_poisson(1) = pulser_freq;	
+	GATE_DELAY(4) = PRNG_POISSON(1);
+	misc_out = GATE_DELAY(4);
+	stretch(4) = 20 ns;
+}
+
+out_beam_gate = ECL_OUT(14);
+out_bos = ECL_OUT(15); 
+out_eos = ECL_OUT(16);
+spill_period = 3000 ms;
+spill_on_length = 2000 ms;
+output_length = 100 ns;
+
+SECTION(beam_gate_mimic) {
+	period(1) = spill_period;
+	GATE_DELAY(1) = PULSER(1);
+	stretch(1) = spill_on_length;
+	out_beam_gate = GATE_DELAY(1);
+
+	// BOS
+	GATE_DELAY(2) = PULSER(1);
+	stretch(2) = output_length;
+	out_bos = GATE_DELAY(2);
+
+	// EOS
+	GATE_DELAY(3) = GATE_DELAY(1);
+	restart_mode(3) = TRAILING_EDGE;
+	stretch(3) = output_length;
+	out_eos = GATE_DELAY(3);
+}

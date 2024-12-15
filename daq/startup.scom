@@ -1,0 +1,20 @@
+start task m_util
+#x "/mbs/driv/mvme/init_mvlc.sh ./v1190_debug.yaml 2l"
+x echo "Loading the trigger logic ..."
+x ./vulomtrig.sh 
+
+load setup ./setup.usf  
+clear trig_mod
+set trig_mod
+
+start task m_read_mvme
+start task m_collector
+start task m_transport
+start task m_stream_serv
+
+ena tcp
+set fl 1
+set stream 1
+
+x "sleep 1" 
+sta mvlc
