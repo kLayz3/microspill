@@ -749,6 +749,62 @@
                 "irqVector": 0,
                 "modules": [
                     {
+                        "baseAddress": 50331648,
+                        "enabled": true,
+                        "id": "{2198c0e3-1658-4eea-ab11-4fc59147d136}",
+                        "initScripts": [
+                            {
+                                "enabled": true,
+                                "id": "{5fb9d7b6-f5e5-4536-b891-852f31fa9dba}",
+                                "name": "Module Init",
+                                "properties": {
+                                    "icon": ":/vme_script.png"
+                                },
+                                "variable_table": {
+                                    "name": "",
+                                    "variables": {
+                                    }
+                                },
+                                "vme_script": "## JAM 15-04-2024:  all addresses and values dedicated to firmware fw_6e4ba1a9_trlo\n## Ported to FRS by M.B. 06.11.2024\n\nset TRLO_PULSE_BASE\t\t\t\t\t0xa000\t#40960\nset TRLO_SETUP_MAX_MULTI_TRIG\t\t0x9730\n\nset TRLO_PULSE_MULTI_TRIG_BUF_CLEAR       0x200000\nset TRLO_PULSE_SERIAL_TSTAMP_BUF_CLEAR  0x20000000\nset TRLO_PULSE_SERIAL_TSTAMP_FAIL_CLEAR 0x40000000\nset TRLO_PULSE_MULTI_LATCH_CLEAR_ALL    0x001e0000\n\n###################################################\n\nwrite a32 d32 ${TRLO_SETUP_MAX_MULTI_TRIG} 0x1\nwrite a32 d32 ${TRLO_PULSE_BASE} ${TRLO_PULSE_MULTI_TRIG_BUF_CLEAR}\nwrite a32 d32 ${TRLO_PULSE_BASE} ${TRLO_PULSE_SERIAL_TSTAMP_BUF_CLEAR}\nwrite a32 d32 ${TRLO_PULSE_BASE} ${TRLO_PULSE_SERIAL_TSTAMP_FAIL_CLEAR}\nwrite a32 d32 ${TRLO_PULSE_BASE} ${TRLO_PULSE_MULTI_LATCH_CLEAR_ALL}"
+                            }
+                        ],
+                        "name": "TRLOII-MULTI-TIMER(2)",
+                        "type": "user05",
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vmeReadout": {
+                            "enabled": true,
+                            "id": "{ec63d8df-d0c4-4d7b-a25d-02e1dacc2ecb}",
+                            "name": "Module Readout",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# Martin B. 05.12.2024\n# Only change the following line:\n\nset INDEX 2\n\n# Do not touch below.\n\nset TRLO_PULSE_BASE\t 0xa000 # 40960   \nset TRLO_MULTI_LATCH 49152  # 0xc000\nset TRIG_TPAT_ADDR                   0x5000\nset TRLO_PULSE_MULTI_LATCH_CLEAR     131072 # 0x00020000\nset TRLO_PULSE_MUX_SRC_SCALER_LATCH  32     # 0x00000020\nset TRLO_PULSE_TIMER_LATCH           128    # 0x00000080\nset TRLO_PULSE_TRIG_SCALER_LATCH     2      # 0x2\n\nset TRLO_MULTI_LATCH_STATUS          20528 \t# 0x5030\n\nset TRLO_SCALER_MUX_SRC              24892  # 0x613c\nset TRLO_TLATCH_TIMING_TICK          32768  # 0x8000\n\n# Barrier between potential VETAR ahead.\nmarker 0xbeefbabe\n\n# Latch mux-scalers, trig-scalers and 100MHz clock status:\nwrite a32 d32 ${TRLO_PULSE_BASE} 0xa2\n\n# Read the TPAT:\nread a32 d32 ${TRIG_TPAT_ADDR} slow\n\n# Read corresponding ECL's_IN\nread a32 d32 $( ${TRLO_SCALER_MUX_SRC} +  4 * (${INDEX} - 1) ) slow\n\n# Read low 32-bits of latched (trigger) timestamp\nread a32 d32 ${TRLO_TLATCH_TIMING_TICK} slow\n\n# Set mask and shift of the local accumulator (for multi-timing register)\nmvlc_mask_shift_accu 0x000003FF 0 \nmvlc_read_to_accu a32 d32 $( ${TRLO_MULTI_LATCH_STATUS} + 4 * (${INDEX} - 1) ) slow\nread a32 d32 $( ${TRLO_MULTI_LATCH} + 4096 * (${INDEX} - 1) ) slow"
+                        },
+                        "vmeReset": {
+                            "enabled": true,
+                            "id": "{0d36ad2f-8497-43d4-917e-9d1782d2f203}",
+                            "name": "Module Reset",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# Reset the module to a clean default state here. This is executed before\n# initializing the modules at DAQ start time.\n"
+                        }
+                    },
+                    {
                         "baseAddress": 33554432,
                         "enabled": true,
                         "id": "{979f4e71-4782-45e7-9252-19753011e942}",
@@ -905,6 +961,62 @@
                 "irqLevel": 10,
                 "irqVector": 0,
                 "modules": [
+                    {
+                        "baseAddress": 50331648,
+                        "enabled": true,
+                        "id": "{f6d9b712-d926-4bc8-b483-bd703b835564}",
+                        "initScripts": [
+                            {
+                                "enabled": true,
+                                "id": "{7b125e8d-cf3a-4493-a7f8-ddeb12e33bde}",
+                                "name": "Module Init",
+                                "properties": {
+                                    "icon": ":/vme_script.png"
+                                },
+                                "variable_table": {
+                                    "name": "",
+                                    "variables": {
+                                    }
+                                },
+                                "vme_script": "## JAM 15-04-2024:  all addresses and values dedicated to firmware fw_6e4ba1a9_trlo\n## Ported to FRS by M.B. 06.11.2024\n\nset TRLO_PULSE_BASE\t\t\t\t\t0xa000\t#40960\nset TRLO_SETUP_MAX_MULTI_TRIG\t\t0x9730\n\nset TRLO_PULSE_MULTI_TRIG_BUF_CLEAR       0x200000\nset TRLO_PULSE_SERIAL_TSTAMP_BUF_CLEAR  0x20000000\nset TRLO_PULSE_SERIAL_TSTAMP_FAIL_CLEAR 0x40000000\nset TRLO_PULSE_MULTI_LATCH_CLEAR_ALL    0x001e0000\n\n###################################################\n\nwrite a32 d32 ${TRLO_SETUP_MAX_MULTI_TRIG} 0x1\nwrite a32 d32 ${TRLO_PULSE_BASE} ${TRLO_PULSE_MULTI_TRIG_BUF_CLEAR}\nwrite a32 d32 ${TRLO_PULSE_BASE} ${TRLO_PULSE_SERIAL_TSTAMP_BUF_CLEAR}\nwrite a32 d32 ${TRLO_PULSE_BASE} ${TRLO_PULSE_SERIAL_TSTAMP_FAIL_CLEAR}\nwrite a32 d32 ${TRLO_PULSE_BASE} ${TRLO_PULSE_MULTI_LATCH_CLEAR_ALL}"
+                            }
+                        ],
+                        "name": "TRLOII-MULTI-TIMER(3)",
+                        "type": "user05",
+                        "variable_table": {
+                            "name": "",
+                            "variables": {
+                            }
+                        },
+                        "vmeReadout": {
+                            "enabled": true,
+                            "id": "{9ed5410e-0fcf-43c2-9fc3-7abfa503ddc2}",
+                            "name": "Module Readout",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# Martin B. 05.12.2024\n# Only change the following line:\n\nset INDEX 3\n\n# Do not touch below.\n\nset TRLO_PULSE_BASE\t 0xa000 # 40960   \nset TRLO_MULTI_LATCH 49152  # 0xc000\nset TRIG_TPAT_ADDR                   0x5000\nset TRLO_PULSE_MULTI_LATCH_CLEAR     131072 # 0x00020000\nset TRLO_PULSE_MUX_SRC_SCALER_LATCH  32     # 0x00000020\nset TRLO_PULSE_TIMER_LATCH           128    # 0x00000080\nset TRLO_PULSE_TRIG_SCALER_LATCH     2      # 0x2\n\nset TRLO_MULTI_LATCH_STATUS          20528 \t# 0x5030\n\nset TRLO_SCALER_MUX_SRC              24892  # 0x613c\nset TRLO_TLATCH_TIMING_TICK          32768  # 0x8000\n\n# Barrier between potential VETAR ahead.\nmarker 0xbeefbabe\n\n# Latch mux-scalers, trig-scalers and 100MHz clock status:\nwrite a32 d32 ${TRLO_PULSE_BASE} 0xa2\n\n# Read the TPAT:\nread a32 d32 ${TRIG_TPAT_ADDR} slow\n\n# Read corresponding ECL's_IN\nread a32 d32 $( ${TRLO_SCALER_MUX_SRC} +  4 * (${INDEX} - 1) ) slow\n\n# Read low 32-bits of latched (trigger) timestamp\nread a32 d32 ${TRLO_TLATCH_TIMING_TICK} slow\n\n# Set mask and shift of the local accumulator (for multi-timing register)\nmvlc_mask_shift_accu 0x000003FF 0 \nmvlc_read_to_accu a32 d32 $( ${TRLO_MULTI_LATCH_STATUS} + 4 * (${INDEX} - 1) ) slow\nread a32 d32 $( ${TRLO_MULTI_LATCH} + 4096 * (${INDEX} - 1) ) slow"
+                        },
+                        "vmeReset": {
+                            "enabled": true,
+                            "id": "{b1780ac3-5f6b-4f5c-9867-762068863d02}",
+                            "name": "Module Reset",
+                            "properties": {
+                                "icon": ":/vme_script.png"
+                            },
+                            "variable_table": {
+                                "name": "",
+                                "variables": {
+                                }
+                            },
+                            "vme_script": "# Reset the module to a clean default state here. This is executed before\n# initializing the modules at DAQ start time.\n"
+                        }
+                    },
                     {
                         "baseAddress": 33554432,
                         "enabled": true,

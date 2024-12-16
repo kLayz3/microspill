@@ -2,11 +2,10 @@
  * A requirement is also a spill gate. If no such gate is present, 
  * execute the `beam_gate_mimic` section and take from there. */
 
-misc_out      = LEMO_OUT(1);
 acc_pulse_out = LEMO_OUT(2);
 
-in_bos     = ECL_IN(7);
-in_eos     = ECL_IN(8);
+in_bos = ECL_IN(7);
+in_eos = ECL_IN(8);
 
 /* Don't touch. */
 SECTION(triva) {
@@ -84,18 +83,39 @@ SECTION(timing) {
 	acc_pulse_out = LMU_OUT(1);
 }
 
-pulser_freq = 100 kHz;
+/* =================================== */
+/* ====== AUXILLARY SECTIONS ========= */
+/* =================================== */
+
+pulser_out  = ECL_OUT( 9);
+poisson_out = ECL_OUT(10);
+poisson_freq = 50 kHz;
+pulser_freq  = 10 kHz;
+
 SECTION(pulser_test) {
-	prng_poisson(1) = pulser_freq;	
-	GATE_DELAY(4) = PRNG_POISSON(1);
-	misc_out = GATE_DELAY(4);
-	stretch(4) = 20 ns;
+	period(3) = pulser_freq;
+	LMU_IN(6) = PULSER(3);
+	LMU_OUT(6) = LMU_IN(6);
+	lmu_restart_mode(6) = LEADING_EDGE | GATE_ENABLE;
+	lmu_stretch(7) = 30 ns;
+	pulser_out  = LMU_OUT(6);
+
+	prng_poisson(1) = poisson_freq;	
+	LMU_IN(7) = PRNG_POISSON(1);
+	LMU_OUT(7) = LMU_IN(7);
+	lmu_restart_mode(7) = LEADING_EDGE | GATE_ENABLE;
+	lmu_stretch(7) = 30 ns;
+	poisson_out  = LMU_OUT(7);
+	
+	//GATE_DELAY(4) = PRNG_POISSON(1);
+	//misc_out = GATE_DELAY(4);
+	//stretch(4) = 20 ns;
 }
 
 out_beam_gate = ECL_OUT(14);
-out_bos = ECL_OUT(15); 
-out_eos = ECL_OUT(16);
-spill_period = 3000 ms;
+out_bos       = ECL_OUT(15); 
+out_eos       = ECL_OUT(16);
+spill_period    = 3000 ms;
 spill_on_length = 2000 ms;
 output_length = 100 ns;
 

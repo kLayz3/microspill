@@ -122,7 +122,7 @@ public:
 	}
 };
 
-/* A flag, that a printing thread has to respect. */
+/* A flag, that a printing thread has to acquire. */
 std::atomic<bool> is_printing(false);
 
 class EventQueue {
@@ -504,7 +504,7 @@ int main(int argc,char *argv[]) {
 					is_in_spill = false;
 					ts_eos = event.VULOM_CLOCK;
 
-					/* Handle last remaining hits. */
+					/* Handle last remaining hits from ECL_IN(1). */
 					counted[0] += event.ECL_INCREMENT;
 					clock.assign(ts_eos);
 					ts_inc += clock.calc_increment();

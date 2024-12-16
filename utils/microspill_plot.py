@@ -98,6 +98,7 @@ def yticks(y):
     return vals, names, minor_ticks
 
 def main():
+
     if '--help' in sys.argv:
         print("Usage: {}\n\t--small\tPrints smaller sized plots")
         exit
@@ -158,7 +159,7 @@ def main():
                 a.cla()
                 a.set_title("Real-time: {} microspill".format(hist_name[i]))
                 bar_width = xs[1] - xs[0];
-                a.bar(xs,ys, width=bar_width, align='edge', edgecolor='black', color=colours[i], capstyle='round', zorder=3, label="Data")
+                a.bar(xs,ys, width=bar_width, align='edge', edgecolor='black', color=colours[i], capstyle='round', zorder=3)
 
                 # Poisson expected fit: def poisson_log_expected(x, N0, T_total, nbins, M)
                 N0 = counted[i]
@@ -179,19 +180,19 @@ def main():
                 major_ticks, major_tick_labels, minor_ticks = xticks(xs)
                 a.set_xticks(major_ticks, major_tick_labels, fontsize=12)
                 a.set_xticks(minor_ticks, minor = True)
-                a.tick_params(axis='x', which='major', length=13, width=1.2, direction='out')
+                a.tick_params(axis='x', which='major', length=12, width=1.2, direction='out')
                 a.tick_params(axis='x', which='minor', length=5, width=1, direction='out')
 
                 major_ticks, major_tick_labels, minor_ticks = yticks(ys)
                 a.set_yticks(major_ticks, major_tick_labels, fontsize=12)
                 a.set_yticks(minor_ticks, minor = True)
-                a.tick_params(axis='y', which='major', length=11, width=1.1, direction='in')
+                a.tick_params(axis='y', which='major', length=10, width=1.1, direction='in')
                 a.tick_params(axis='y', which='minor', length=4, width=1, direction='in')
                 a.spines['top'].set_visible(False) 
                 a.spines['right'].set_visible(False) 
                 a.set_xlabel(r"$\Delta t$", fontsize=15, loc='right')
                 a.set_ylabel("Count", fontsize=13)
-                a.legend()
+                if(N0 > 10): a.legend()
                 plt.pause(0.1);
             else:
                 for sub in line:

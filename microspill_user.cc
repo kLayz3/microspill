@@ -129,9 +129,11 @@ void unpack_spill_data(unpack_event *event) {
 		scaler->assign(val); \
 		if(is_in_init) continue; \
 		uint32_t dt = scaler->calc_increment(); \
-		if(val & 0x80000000) { /* One hit in between has been lost for sure. Try to fake it. */ \
+		if(val & 0x80000000) { \
+			/* One hit in between has been lost for sure. 
+			 * Try to fake it by supposing it's right in the middle of them. */ \
 			out_delta_t->append_item().value = dt / 2; \
-			out_delta_t->append_item().value = dt; \
+			out_delta_t->append_item().value = dt / 2; \
 		} \
 		else { /* No hits lost. */ \
 			out_delta_t->append_item().value = dt; \

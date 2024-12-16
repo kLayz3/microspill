@@ -185,7 +185,7 @@ def calc_yticks(y):
     return PlotTicks(vals, names, minor_ticks)
 
 def read_stdin(queue_micro, queue_macro):
-    while True:
+    while True and not stop_event.is_set():
         line = sys.stdin.readline().split() 
         if(len(line) == 0):
             continue
@@ -206,7 +206,7 @@ def handle_microspill(queue_input, queue_output):
         spill_data.append(s0)
     
     try:
-        while True:
+        while True and not stop_event.is_set():
             while not queue_input.empty():
                 line = queue_input.get()
                 if(re.fullmatch("^\d+\.?\d*:\d$", line[0]) != None):
@@ -250,8 +250,9 @@ def handle_microspill(queue_input, queue_output):
                     if(len(xs) > 5):
                         output.xticks = calc_xticks(xs)
                         output.yticks = calc_yticks(ys)
-                    
-                    queue_output.put(output)
+                    if(N0 > 10):
+                        print("Microthread: Put in output.")
+                        queue_output.put(output)
                 else:
                     for sub in line:
                         sub = sub.split(":")
@@ -291,7 +292,7 @@ def handle_microspill(queue_input, queue_output):
 
 def handle_macrospill(queue):
     try:
-        while True:
+        while True and not stop_event.is_set():
             while not queue.empty():
                 line = queue.get() # It's already split as a list.
     except KeyboardInterrupt:
@@ -340,8 +341,8 @@ def main():
         while True:
             try:
                 while not micro_output.empty():
-                    micro = micro_output.get()
-
+                    struct = micro_output.get()
+                    print("-- UPDATE: ", datetime.now())
                     # Decompose it back for easier naming.
                     # Isn't nice, but f*** it.
                     (
@@ -351,7 +352,7 @@ def main():
                         (xticks_major, xticks_names, xticks_minor), 
                         (yticks_major, yticks_names, yticks_minor),
                         (counted, ecl_diff, elapsed_time_10ns, overflows, lost)
-                    ) = micro
+                    ) = struct
                     
                     if(len(pxs) > 0):
                         a = axes[i] 
@@ -371,19 +372,21 @@ def main():
                         a.set_yticks(yticks_major, yticks_names, fontsize=12)
                         a.set_yticks(yticks_minor, minor = True)
                         a.legend()
-                        plt.pause(0.1);
+                        
+                        plt.pause(0.2);
+
             except KeyboardInterrupt:
-                print("\nMain loop. Keyboard interrupt received. Freezing plots. Press again to terminate.")
+                print("\n{}: main loop. Keyboard interrupt received. Freezing plots. Press again to terminate.".format(sys.argv[0]))
                 stop_event.set()
                 break
 
         thread_reader.join()
         thread_micro.join()
         thread_macro.join()
-        print("All threads finished. Quitting")
+        print("{}: all threads finished. Quitting".format(sys.argv[0]))
     
     except KeyboardInterrupt:
-        print("\nSecond keyboard interrupt received. Exiting..")
+        print("\n{}: second keyboard interrupt received. Exiting..\n".format(sys.argv[0]))
 
     plt.ioff()
 
