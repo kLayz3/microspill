@@ -260,6 +260,7 @@ public:
 		time_in_spill = 0.0;
 		is_first_after_bos = true;
 	}
+#if 0
 	void fill(unpack_event *event) {
 		nil<1024>* delta_t = &event->trloii_mvlc.dt;
 		uint32_t nitems = delta_t->_num_items;
@@ -269,22 +270,15 @@ public:
 			++arr[bin];
 		}
 	}
-
-#if 0
+#endif
 	void fill(unpack_event *event) {
 		nil<1024>* delta_t = &event->trloii_mvlc.dt;
 		uint32_t nitems = delta_t->_num_items;
-		if(!is_first_after_bos) {
-			FOR(i, nitems) {
-				time_in_spill += delta_t->_items[i].value / 1e8;
-				int bin = std::min(static_cast<int>(time_in_spill/bin_width), MAX_BINS_MACRO);
-				++arr[bin];
-			}
-		}
-		else {
-			/* Time t=0 is begining of spill. Don't rely on `delta_t` between hits,
+		if(is_first_after_bos) {	
+			/* Time t=0 is begining-of-spill. Don't rely on `delta_t` between hits,
 			 * Initially, get time difference from absolute stamp relative to BoS stamp.
-			 * Abusing the fact that timing list is sorted in time. */
+			 * Abusing the fact that timing list is sorted in time. Only mind that
+			 * it's 31-bit stamp. */
 
 			uint32_t init_ts;
 			nil<1024>* timing = &event->trloii_mvlc.spill_extra.timing;
@@ -294,7 +288,7 @@ public:
 				init_ts = timing->_items[0].value;
 			} else return;
 
-			time_in_spill = Scaler<>::calc_diff(init_ts, bos_ts) / 1e8; // Can be negative.
+			time_in_spill = Scaler<31>::calc_diff(init_ts, bos_ts) / 1e8; // Can be negative.
 			nil<1024>* delta_t = &event->trloii_mvlc.dt;
 			uint32_t nitems = delta_t->_num_items;
 			for(uint32_t i=0; i < nitems; ++i) {
@@ -305,9 +299,14 @@ public:
 			}
 			is_first_after_bos = false;
 		}
+		else {
+			FOR(i, nitems) {
+				time_in_spill += delta_t->_items[i].value / 1e8;
+				int bin = std::min(static_cast<int>(time_in_spill/bin_width), MAX_BINS_MACRO);
+				++arr[bin];
+			}
+		}
 	}
-#endif
-
 	void fill_offspill(unpack_event *event) {
 		nil<1024>* delta_t = &event->trloii_mvlc.dt;
 		offspill += delta_t->_num_items;
@@ -336,12 +335,6 @@ public:
 
 	uint32_t get_errors() const {
 		return arr[MAX_BINS_MACRO];
-	}
-
-	uint32_t get_accumulated() const {
-		uint32_t acc = 0;
-		FOR(i, MAX_BINS_MACRO) acc += arr[i];
-		return acc;
 	}
 };
 
