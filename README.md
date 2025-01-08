@@ -46,7 +46,7 @@ Macrospill data is also given, with the intial time 0 being given by the BoS sig
 - `timestamp`         - datetime string either derived from Whiterabbit (preferrable) or from unpacking machine's system time.
 - `data`              - array of four JSON objects holding the individual channel's data
 
-#### `j["data"]` object microspill:
+#### `j["data"]` object:
 - `name`               - name of the channel, can be passed via `--alias` flag to the server process.
 - `offspill`           - offspill counts.
 - `binx`               - arithmetic sequence (type: Number) of central positions of the bins.
@@ -55,6 +55,7 @@ Macrospill data is also given, with the intial time 0 being given by the BoS sig
 - `poisson_y`          - sequence of bin heights that a Poissonian distribution would have. Can be `null`.
 - `poisson_x`          - corresponding central bin positions.
 - `elapsed_time_10ns`  - elapsed time between the initial and the final hit during the on-spill.
+- `counted`            - hits correctly accounted for.
 - `lost_hits`          - hits that got counted by the scaler but didn't get stamped.
 - `xticks_major`       - major x-axis ticks for the plot.
 - `xticks_minor`       - minor x-axis ticks for the plot.

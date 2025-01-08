@@ -76,8 +76,8 @@ axes = axs.flatten();
 for i in range(4):
     a = axes[i]
     a.set_title("Real-time ECL_IN({}) macrospill".format(i+1))
-    a.set_xlabel(r"$t$", fontsize=12, loc='right')
-    a.set_ylabel("Count", fontsize=12)
+    a.set_xlabel(r"$t$ [s]", fontsize=14, loc='right')
+    a.set_ylabel("Count", fontsize=14)
 
 colours = ["tomato", "greenyellow", "skyblue", "magenta"]
 
@@ -96,7 +96,11 @@ while True:
 
         if verbose:
             print("[MAIN THR] Attempting to draw spill: #{}".format(parsed_json["spill_number"]));
-        fig.suptitle(parsed_json["timestamp"] + "\n" + "Spill number: {}".format(parsed_json["spill_number"]))
+        fig.suptitle(
+            parsed_json["timestamp"] + "\n" + 
+            "Spill number: {}".format(parsed_json["spill_number"]) + "\n"
+            "Spill duration: {:.2f}s".format(parsed_json["spill_duration"]/1e8)
+        )
         for i in range(4):
             data = parsed_json["data"][i]
             a = axes[i]
@@ -105,13 +109,18 @@ while True:
             xs = data["macro_x"]
             ys = data["macro_y"]
             bar_width = xs[1] - xs[0]
-            a.bar(xs, ys, width=bar_width, edgecolor='black', color=colours[i], capstyle='round', zorder=3)
-            a.grid(True, axis='y', alpha=0.7, zorder=2)
+            a.bar(xs, ys, width=bar_width, edgecolor='black', color=colours[i], capstyle='round', alpha = 0.5, zorder=3)
+            a.text(0.5, 0.2,
+            "Counted: {:.1f}k\nOffspill counted: {:d}".format(sum(ys) / 1e3, data["offspill"]),
+            ha='center', va='bottom', transform = a.transAxes,
+            bbox=dict(facecolor='lightyellow', edgecolor='black', alpha=0.66, capstyle='round'),fontsize='medium', fontweight='semibold')
+
+            a.grid(True, axis='y', alpha=0.6, zorder=2)
             a.spines['top'].set_visible(False) 
             a.spines['right'].set_visible(False) 
 
-            a.set_xlabel(r"$t$ [s]", fontsize=15, loc='right')
-            a.set_ylabel("Count", fontsize=13)
+            a.set_xlabel(r"$t$ [s]", fontsize=14, loc='right')
+            a.set_ylabel("Count", fontsize=14)
        
         plt.pause(0.1)
         if verbose:
